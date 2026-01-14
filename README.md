@@ -1,4 +1,4 @@
-# VIPER PATHFINDING USING HPC
+# ROVER PATHFINDING USING HPC
 
 The goal of this project is to develop an understanding of pathfinding algorithms and how they could be used, particularly in an HPC environment, to calculate optimal paths for lunar rovers such as *VIPER*.
 <br><br>
