@@ -68,6 +68,6 @@ Arguments:
 
 Dylan Britain
 
-Dr. Liwen Shih, University of Houston - Clear Lake, Spring 2025
+Dr. Liwen Shih, University of Houston - Clear Lake, Spring 2025 - Fall 2026
 
 ---
