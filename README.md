@@ -1,6 +1,6 @@
-# ROVER PATHFINDING USING HPC
+# ROVER PATHFINDING/PATHPLANNING USING A* 
 
-The goal of this project is to develop an understanding of pathfinding algorithms and how they could be used, particularly in an HPC environment, to calculate optimal paths for lunar rovers such as *VIPER*.
+Initially being developed for CENG 6332 (High Performance Computer Architecture) and subsequently being built upon for thesis, the goal of this project is to develop an understanding of pathfinding algorithms and how they could be used, particularly in an HPC environment, to calculate optimal paths for lunar rovers such as *VIPER*.
 <br><br>
 
 ![image](https://github.com/user-attachments/assets/c70ffcf4-3bcb-4368-9cf8-a9408b967010)
@@ -65,7 +65,6 @@ Arguments:
 [Algorithm Visualization Base](https://www.youtube.com/watch?v=JtiK0DOeI4A&ab_channel=TechWithTim)
 
 ---
-For CENG6332 - High Performance Computer Architecture.
 
 Dylan Britain
 
