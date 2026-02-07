@@ -35,6 +35,7 @@ if args.fivesplit:
             print("ERR: Using fivesplit requires 5 values between 0-255.")
             quit()
 
+# Get source file name
 source_img_stripped = os.path.splitext(args.source_img)[0]
 
 # Open the image and check that its square
@@ -57,7 +58,7 @@ for img in images:
     # Convert to barrier/free nodes
     if args.binary:
         # Convert to grayscale for brightness analysis
-        img = img.convert("L")  # Convert to grayscale
+        img = img.convert("L") 
 
         # Get pixel access
         bw_image = Image.new("RGB", img.size)  # Create a new blank image
@@ -78,7 +79,7 @@ for img in images:
         split_points = sorted(args.fivesplit)
 
         # Convert to grayscale for brightness analysis
-        img = img.convert("L")  # Convert to grayscale
+        img = img.convert("L") 
 
         # Get pixel access
         bw_image = Image.new("RGB", img.size)  # Create a new blank image
