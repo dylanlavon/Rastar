@@ -7,16 +7,15 @@ Initially being developed for CENG 6332 (High Performance Computer Architecture)
 
 
 ## To Do:
-- [x] Add a timer
-- [x] Support diagonal movement
-- [x] Add octile heuristic
-- [x] Add edge weights
-- [x] Heightmap-to-pathfinding-map-data converter
-- [x] Load pathfinding map data from a file
-- [x] No-visualization mode / Only show final path (implemented as --path_only arg)
-- [ ] Find shortest path between multiple goal nodes / nodes of interest
+- [ ] Implement Single-heuristic D*
+- [ ] Add multi-heuristic support
+- - [ ] Mock lighting
+- - [ ] Mock slope
+- - [ ] Mock comms line-of-sight
+- [ ] Multiple science stations (TSP)
+- [ ] Field-based traversal
 <br><br>
-## Using astar.py
+## Using main.py
 **Runs the A\* Pathfinding visualization.**
 
 In a new grid, the first left click will place the start node (teal). The second left click will place the goal node (orange). Any left clicks after these two nodes are placed will be barrier nodes (black).
@@ -41,7 +40,7 @@ Arguments:
 
 <br><br>
 ## Using img_to_grid.py
-**Convert a square image into a map for use in astar.py.**
+**Convert a square image into a map for use in main.py.**
 
 Downscales an image to the specified size.
 
