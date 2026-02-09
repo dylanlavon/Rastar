@@ -1,8 +1,27 @@
 #!/usr/bin/env python3
+"""
+Image conversion utility for generating grid maps used in the Rover A* Pathfinding Tool.
 
+This script processes source images from the 'source_images' directory to produce
+square grid maps compatible with the visualization and pathfinding modules. 
+
+Supported operations:
+- Resizing images to a specified square dimension.
+- Converting to binary barrier/free maps based on a brightness threshold.
+- Creating weighted terrain maps with 4 edge weights plus barriers (fivesplit).
+- Optionally generating higher-resolution versions for dynamic path visualization.
+
+Command-line arguments determine the conversion method, output size, and optional
+dynamic scaling. Output images are saved in the 'maps' directory with a filename
+indicating their resolution.
+"""
+
+# External dependencies
 from PIL import Image
 import argparse
 import os
+
+# Internal dependencies
 import colors
 
 # Setup args

@@ -1,3 +1,8 @@
+"""
+RGB color definitions representing node states, terrain costs, and visualization
+elements in the A* pathfinding grid.
+"""
+
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
