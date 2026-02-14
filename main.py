@@ -94,21 +94,41 @@ def main(win, width):
 
     if args.path_only:
         x1, y1, x2, y2 = args.path_only
-        active_grid.start_pos = grid[x1][y1]
-        active_grid.start_pos.set_start()
-        active_grid.end_pos = grid[x2][y2]
-        active_grid.end_pos.set_end()
+        
+        # --- Process Coarse Grid ---
+        coarse_grid.start_pos = coarse_grid.grid[x1][y1]
+        coarse_grid.start_pos.set_start()
+        coarse_grid.end_pos = coarse_grid.grid[x2][y2]
+        coarse_grid.end_pos.set_end()
 
-        # Update neighbors first
-        for row in grid:
+        for row in coarse_grid.grid:
             for node in row:
-                node.update_neighbors(grid, args.heuristic)
+                node.update_neighbors(coarse_grid.grid, args.heuristic)
 
         if args.precheck:
-            algo.bfs_precheck(active_grid.start_pos, active_grid.end_pos)
+            algo.bfs_precheck(coarse_grid.start_pos, coarse_grid.end_pos)
 
-        # Run algorithm with dummy draw function
-        algo.algorithm(lambda: None, grid, active_grid.start_pos, active_grid.end_pos, args.heuristic)
+        algo.algorithm(lambda: None, coarse_grid.grid, coarse_grid.start_pos, coarse_grid.end_pos, args.heuristic)
+
+        # --- Process Dynamic Grid (if exists) ---
+        if dyn_grid:
+            # Calculate the scale factor between the two maps
+            scale = dyn_map_size / args.size
+            
+            # Map the coordinates (convert to int to get exact grid indices) and do boundary check
+            dyn_grid.start_pos = dyn_grid.grid[min(int(x1 * scale), dyn_map_size - 1)][min(int(y1 * scale), dyn_map_size - 1)]
+            dyn_grid.start_pos.set_start()
+            dyn_grid.end_pos = dyn_grid.grid[min(int(x2 * scale), dyn_map_size - 1)][min(int(y2 * scale), dyn_map_size - 1)]
+            dyn_grid.end_pos.set_end()
+
+            for row in dyn_grid.grid:
+                for node in row:
+                    node.update_neighbors(dyn_grid.grid, args.heuristic)
+
+            if args.precheck:
+                algo.bfs_precheck(dyn_grid.start_pos, dyn_grid.end_pos)
+
+            algo.algorithm(lambda: None, dyn_grid.grid, dyn_grid.start_pos, dyn_grid.end_pos, args.heuristic)
 
         # Now show window and draw final state
         global WIN
@@ -165,8 +185,6 @@ def main(win, width):
                     # Toggle between coarse and dynamic grids
                     active_grid = dyn_grid if active_grid == coarse_grid else coarse_grid
                     grid = active_grid.grid
-                    # We no longer clear start/end positions here! 
-                    # The active_grid inherently remembers its own start/end nodes.
 
                 if event.key == pygame.K_c:
                     # Re-instantiate only the currently active grid to clear it
