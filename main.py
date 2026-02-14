@@ -39,9 +39,9 @@ def main(win, width):
     parser.add_argument("-p", "--precheck", action="store_true", help="Run a BFS precheck to confirm that the start node can reach the end node")
     args = parser.parse_args()
 
-    start_pos = None
-    end_pos = None
-    map_img = None  # Initialize map_img to pass to Grid securely
+    map_img = None  
+    dyn_map_img = None
+    dyn_map_size = None
 
     if args.use_map:
         # Load map if path exists
@@ -74,21 +74,30 @@ def main(win, width):
                 print("ERR: Invalid coord in --path_only. Coord value must be between 0 and the map size.")
                 quit()
 
-    # === Instantiate the new Grid class ===
-    my_grid = grid_manager.Grid(args.size, width, win, map_img)
-    
+    # === Instantiate the Grid classes & attach state tracking ===
+    coarse_grid = grid_manager.Grid(args.size, width, win, map_img)
+    coarse_grid.start_pos = None
+    coarse_grid.end_pos = None
     if args.use_map:
-        my_grid.load_map()
+        coarse_grid.load_map()
+
+    dyn_grid = None
+    if args.dynamic:
+        dyn_grid = grid_manager.Grid(dyn_map_size, width, win, dyn_map_img)
+        dyn_grid.start_pos = None
+        dyn_grid.end_pos = None
+        dyn_grid.load_map()
         
-    # Keep a reference to the 2D array for algo functions and iterating
-    grid = my_grid.grid
+    # Set the initial active state
+    active_grid = coarse_grid
+    grid = active_grid.grid
 
     if args.path_only:
         x1, y1, x2, y2 = args.path_only
-        start_pos = grid[x1][y1]
-        start_pos.set_start()
-        end_pos = grid[x2][y2]
-        end_pos.set_end()
+        active_grid.start_pos = grid[x1][y1]
+        active_grid.start_pos.set_start()
+        active_grid.end_pos = grid[x2][y2]
+        active_grid.end_pos.set_end()
 
         # Update neighbors first
         for row in grid:
@@ -96,76 +105,102 @@ def main(win, width):
                 node.update_neighbors(grid, args.heuristic)
 
         if args.precheck:
-            algo.bfs_precheck(start_pos, end_pos)
+            algo.bfs_precheck(active_grid.start_pos, active_grid.end_pos)
 
         # Run algorithm with dummy draw function
-        algo.algorithm(lambda: None, grid, start_pos, end_pos, args.heuristic)
+        algo.algorithm(lambda: None, grid, active_grid.start_pos, active_grid.end_pos, args.heuristic)
 
         # Now show window and draw final state
         global WIN
         WIN = pygame.display.set_mode((width, width))
-        my_grid.win = WIN  # Update the window reference in the class
-        my_grid.draw()
+        coarse_grid.win = WIN
+        if dyn_grid:
+            dyn_grid.win = WIN
+        active_grid.draw()
 
     run = True
     while run:
-        my_grid.draw()
+        active_grid.draw()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
 
             if pygame.mouse.get_pressed()[0]:
                 pos = pygame.mouse.get_pos()
-                row, col = my_grid.get_clicked_pos(pos)
+                row, col = active_grid.get_clicked_pos(pos)
                 node = grid[row][col]
-                if not start_pos and node != end_pos:
-                    start_pos = node
-                    start_pos.set_start()
-                elif not end_pos and node != start_pos:
-                    end_pos = node
-                    end_pos.set_end()
-                elif node != start_pos and node != end_pos:
+                if not active_grid.start_pos and node != active_grid.end_pos:
+                    active_grid.start_pos = node
+                    active_grid.start_pos.set_start()
+                elif not active_grid.end_pos and node != active_grid.start_pos:
+                    active_grid.end_pos = node
+                    active_grid.end_pos.set_end()
+                elif node != active_grid.start_pos and node != active_grid.end_pos:
                     node.set_barrier()
 
             elif pygame.mouse.get_pressed()[2]:
                 pos = pygame.mouse.get_pos()
-                row, col = my_grid.get_clicked_pos(pos)
+                row, col = active_grid.get_clicked_pos(pos)
                 node = grid[row][col]
                 node.reset()
-                if node == start_pos:
-                    start_pos = None
-                if node == end_pos:
-                    end_pos = None
+                if node == active_grid.start_pos:
+                    active_grid.start_pos = None
+                if node == active_grid.end_pos:
+                    active_grid.end_pos = None
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE and start_pos and end_pos:
-                    # Update neighbors for each node
+                if event.key == pygame.K_SPACE and active_grid.start_pos and active_grid.end_pos:
+                    # Update neighbors for each node in the active grid
                     for row in grid:
                         for node in row:
                             node.update_neighbors(grid, args.heuristic)
 
                     if args.precheck:
                         # Quick BFS check if the end node is reachable from the start node
-                        algo.bfs_precheck(start_pos, end_pos)
+                        algo.bfs_precheck(active_grid.start_pos, active_grid.end_pos)
 
-                    algo.algorithm(lambda: my_grid.draw(), grid, start_pos, end_pos, args.heuristic)
+                    algo.algorithm(lambda: active_grid.draw(), grid, active_grid.start_pos, active_grid.end_pos, args.heuristic)
+
+                if event.key == pygame.K_d and dyn_grid:
+                    # Toggle between coarse and dynamic grids
+                    active_grid = dyn_grid if active_grid == coarse_grid else coarse_grid
+                    grid = active_grid.grid
+                    # We no longer clear start/end positions here! 
+                    # The active_grid inherently remembers its own start/end nodes.
 
                 if event.key == pygame.K_c:
-                    start_pos = None
-                    end_pos = None
-                    my_grid = grid_manager.Grid(args.size, width, WIN)
-                    grid = my_grid.grid
+                    # Re-instantiate only the currently active grid to clear it
+                    if active_grid == coarse_grid:
+                        coarse_grid = grid_manager.Grid(args.size, width, WIN)
+                        coarse_grid.start_pos = None
+                        coarse_grid.end_pos = None
+                        active_grid = coarse_grid
+                    else:
+                        dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN)
+                        dyn_grid.start_pos = None
+                        dyn_grid.end_pos = None
+                        active_grid = dyn_grid
+                    grid = active_grid.grid
 
                 if event.key == pygame.K_r:
-                    start_pos = None
-                    end_pos = None
-                    my_grid = grid_manager.Grid(args.size, width, WIN, map_img)
-                    if args.use_map:
-                        my_grid.load_map()
-                    grid = my_grid.grid
+                    # Re-instantiate and reload the active grid
+                    if active_grid == coarse_grid:
+                        coarse_grid = grid_manager.Grid(args.size, width, WIN, map_img)
+                        coarse_grid.start_pos = None
+                        coarse_grid.end_pos = None
+                        if args.use_map:
+                            coarse_grid.load_map()
+                        active_grid = coarse_grid
+                    else:
+                        dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
+                        dyn_grid.start_pos = None
+                        dyn_grid.end_pos = None
+                        dyn_grid.load_map()
+                        active_grid = dyn_grid
+                    grid = active_grid.grid
 
                 if event.key == pygame.K_t:
-                    my_grid.toggle_search_area()
+                    active_grid.toggle_search_area()
 
     pygame.quit()
 
