@@ -152,3 +152,47 @@ class Grid:
                     self.grid[x][y].set_fivesplit2()
                 elif map_pixels[x, y] == colors.FIVESPLIT_1:
                     self.grid[x][y].set_fivesplit1()
+
+    def sensor_sweep(self, center_node, radius=1):
+        """
+        Simulate a rover's sensor sweep by reading the ground-truth image (self.map_img)
+        within a given radius around the center_node and updating the grid nodes 
+        to reflect the actual terrain.
+        
+        :param center_node: The Node object representing the rover's current position
+        :param radius: How many nodes out the sensor can "see" (default 1 means a 3x3 area)
+        """
+        if not self.map_img:
+            return
+
+        map_pixels = self.map_img.load()
+        cx, cy = center_node.row, center_node.col
+
+        # Loop through a bounding box defined by the radius
+        for i in range(-radius, radius + 1):
+            for j in range(-radius, radius + 1):
+                x = cx + i
+                y = cy + j
+
+                # Check if x and y are within grid boundaries
+                if 0 <= x < self.rows and 0 <= y < self.rows:
+                    node = self.grid[x][y]
+                    
+                    # Prevent overwriting the rover's start/end markers
+                    # (Assume start/end logic has a node.is_start() or node.is_end() equivalent; 
+                    # otherwise, we check color or just proceed carefully)
+                    if node.color == colors.ORANGE or node.color == colors.TURQUOISE:
+                        continue
+                        
+                    pixel_color = map_pixels[x, y]
+                    
+                    if pixel_color == colors.BLACK:
+                        node.set_barrier()
+                    elif pixel_color == colors.FIVESPLIT_4:
+                        node.set_fivesplit4()
+                    elif pixel_color == colors.FIVESPLIT_3:
+                        node.set_fivesplit3()
+                    elif pixel_color == colors.FIVESPLIT_2:
+                        node.set_fivesplit2()
+                    elif pixel_color == colors.FIVESPLIT_1:
+                        node.set_fivesplit1()

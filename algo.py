@@ -45,20 +45,29 @@ def reconstruct_path(came_from, current, draw, start_pos):
     `came_from` mapping (which is populated in the algorithm() function)
     until reaching the start node.
 
-    Each intermediate node is marked as part
-    of the final path and the display is updated after each step.
+    Each intermediate node is marked as part of the final path, the display 
+    is updated after each step, and the nodes are compiled into a list.
     
-    :param came_from: Dict mapping each node to the node it was reach from during the search (parent pointers created in algorithm())
+    :param came_from: Dict mapping each node to the node it was reach from during the search
     :param current: The goal node from which path reconstruction begins
     :param draw: Callback function used to redraw the grid after each update
     :param start_pos: The starting node for this path; not marked as part of the path
+    :return: A sequential list of nodes representing the final path
     """
+    path = [current]
     while current in came_from:
         if came_from[current] == start_pos:
-            break  # Stop before setting the start node as path
+            break  # Stop before visually setting the start node to purple
         current = came_from[current]
-        current.set_path()
+        current.set_path() # Visually color the node purple
+        path.append(current)
         draw()
+
+    path.append(start_pos)
+        
+    # Reverse the list so it flows from start -> end
+    path.reverse()
+    return path
 
 def bfs_precheck(start, end):
     """
@@ -111,6 +120,7 @@ def algorithm(draw, grid, start_pos, end_pos, heurisitc):
     :param start_pos: Starting node for the path search
     :param end_pos: Goal node for the path search
     :param heurisitc: Heuristic being used (either 'manhattan', 'euclidean', or 'octile')
+    :return: List of path nodes if successful, None otherwise
     """
     start_time = time.time() # Start timer
     count = 0
@@ -135,7 +145,8 @@ def algorithm(draw, grid, start_pos, end_pos, heurisitc):
         nodes_explored += 1
 
         if current == end_pos:
-            reconstruct_path(came_from, end_pos, draw, start_pos)
+            # Reconstruct the path and capture the returned list
+            final_path = reconstruct_path(came_from, end_pos, draw, start_pos)
             end_pos.set_end()
             end_time = time.time()
             print(f"\nPath successfully found.\nExecution time: {end_time - start_time:.4f} seconds\nTotal path cost: {g_score[end_pos]:.4f}\nTotal spaces explored: {nodes_explored}")
@@ -150,7 +161,8 @@ def algorithm(draw, grid, start_pos, end_pos, heurisitc):
             else:
                 print(f"Heuristic appears ADMISSIBLE. h(start): {h_start:.4f}, true_cost: {true_cost:.4f}")
 
-            return True
+            # Return the list of waypoints so main.py can use them for the dynamic pass
+            return final_path
         
         for neighbor in current.neighbors:
             # Determine g_score based on cardinal/diagonal
@@ -189,4 +201,4 @@ def algorithm(draw, grid, start_pos, end_pos, heurisitc):
 
     end_time = time.time()
     print(f"\nUnable to find a path.\nExecution time: {end_time - start_time:.4f} seconds\nTotal spaces explored: {nodes_explored}")
-    return False
+    return None
