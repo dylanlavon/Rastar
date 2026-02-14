@@ -41,6 +41,7 @@ def main(win, width):
 
     start_pos = None
     end_pos = None
+    map_img = None  # Initialize map_img to pass to Grid securely
 
     if args.use_map:
         # Load map if path exists
@@ -73,10 +74,14 @@ def main(win, width):
                 print("ERR: Invalid coord in --path_only. Coord value must be between 0 and the map size.")
                 quit()
 
-    grid = grid_manager.make_grid(args.size, width)
-
+    # === Instantiate the new Grid class ===
+    my_grid = grid_manager.Grid(args.size, width, win, map_img)
+    
     if args.use_map:
-        grid_manager.load_map(grid, map_img)
+        my_grid.load_map()
+        
+    # Keep a reference to the 2D array for algo functions and iterating
+    grid = my_grid.grid
 
     if args.path_only:
         x1, y1, x2, y2 = args.path_only
@@ -99,18 +104,19 @@ def main(win, width):
         # Now show window and draw final state
         global WIN
         WIN = pygame.display.set_mode((width, width))
-        grid_manager.draw(WIN, grid, args.size, width)
+        my_grid.win = WIN  # Update the window reference in the class
+        my_grid.draw()
 
     run = True
     while run:
-        grid_manager.draw(WIN, grid, args.size, width)
+        my_grid.draw()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
 
             if pygame.mouse.get_pressed()[0]:
                 pos = pygame.mouse.get_pos()
-                row, col = grid_manager.get_clicked_pos(pos, args.size, width)
+                row, col = my_grid.get_clicked_pos(pos)
                 node = grid[row][col]
                 if not start_pos and node != end_pos:
                     start_pos = node
@@ -123,7 +129,7 @@ def main(win, width):
 
             elif pygame.mouse.get_pressed()[2]:
                 pos = pygame.mouse.get_pos()
-                row, col = grid_manager.get_clicked_pos(pos, args.size, width)
+                row, col = my_grid.get_clicked_pos(pos)
                 node = grid[row][col]
                 node.reset()
                 if node == start_pos:
@@ -142,21 +148,24 @@ def main(win, width):
                         # Quick BFS check if the end node is reachable from the start node
                         algo.bfs_precheck(start_pos, end_pos)
 
-                    algo.algorithm(lambda: grid_manager.draw(WIN, grid, args.size, width), grid, start_pos, end_pos, args.heuristic)
+                    algo.algorithm(lambda: my_grid.draw(), grid, start_pos, end_pos, args.heuristic)
 
                 if event.key == pygame.K_c:
                     start_pos = None
                     end_pos = None
-                    grid = grid_manager.make_grid(args.size, width)
+                    my_grid = grid_manager.Grid(args.size, width, WIN)
+                    grid = my_grid.grid
 
                 if event.key == pygame.K_r:
                     start_pos = None
                     end_pos = None
-                    grid = grid_manager.make_grid(args.size, width)
-                    grid_manager.load_map(grid, map_img)
+                    my_grid = grid_manager.Grid(args.size, width, WIN, map_img)
+                    if args.use_map:
+                        my_grid.load_map()
+                    grid = my_grid.grid
 
                 if event.key == pygame.K_t:
-                    grid_manager.toggle_search_area(grid)
+                    my_grid.toggle_search_area()
 
     pygame.quit()
 

@@ -1,5 +1,5 @@
 """
-Utility functions for rendering and interacting with the grid-based pathfinding
+Utility class for rendering and interacting with the grid-based pathfinding
 visualization using Pygame.
 
 This module is responsible for:
@@ -20,132 +20,135 @@ import pygame
 from node import Node
 import colors
 
-def toggle_search_area(grid):
-    """
-    Toggle all 'traversed' nodes between their 'searched' colors (red/green) and the original map's colors.
-    
-    :param grid: Grid of nodes in which to toggle
-    """
-    for row in grid:
-        for node in row:
-            if node.node_type == "traversed":
-                if node.color == colors.GREEN or node.color == colors.RED:
-                    node.prev_color = node.color
-                    if node.extra_cost == 0:
-                        node.color = colors.WHITE
-                    elif node.extra_cost == 1:
-                        node.color = colors.FIVESPLIT_1
-                    elif node.extra_cost == 2:
-                        node.color = colors.FIVESPLIT_2
-                    elif node.extra_cost == 3:
-                        node.color = colors.FIVESPLIT_3
-                    elif node.extra_cost == 4:
-                        node.color = colors.FIVESPLIT_4
-                else:
-                    node.color = node.prev_color
+class Grid:
+    def __init__(self, rows, width, win, map_img=None):
+        """
+        Initialize the Grid class with required attributes.
+        
+        :param rows: Number of rows/columns in the grid
+        :param width: Width/height of the pygame window being rendered to
+        :param win: The pygame window surface
+        :param map_img: Optional PIL image object of the map to load
+        """
+        self.rows = rows
+        self.width = width
+        self.win = win
+        self.map_img = map_img
+        self.grid = []
+        
+        # Generate the grid immediately upon instantiation
+        self.make_grid()
 
-def make_grid(rows, width):
-    """
-    Creates an nxn matrix of nodes
-    
-    :param rows: Number of rows/columns in the grid
-    :param width: Width/height of the pygame window being rendered to
-    """
-    grid = []
-    gap = width // rows # Width/height of each node being rendered
-    for i in range(rows):
-        grid.append([])
-        for j in range(rows):
-            node = Node(i, j, gap, rows)
-            grid[i].append(node)
-    return grid
+    def toggle_search_area(self):
+        """
+        Toggle all 'traversed' nodes between their 'searched' colors (red/green) 
+        and the original map's colors.
+        """
+        for row in self.grid:
+            for node in row:
+                if node.node_type == "traversed":
+                    if node.color == colors.GREEN or node.color == colors.RED:
+                        node.prev_color = node.color
+                        if node.extra_cost == 0:
+                            node.color = colors.WHITE
+                        elif node.extra_cost == 1:
+                            node.color = colors.FIVESPLIT_1
+                        elif node.extra_cost == 2:
+                            node.color = colors.FIVESPLIT_2
+                        elif node.extra_cost == 3:
+                            node.color = colors.FIVESPLIT_3
+                        elif node.extra_cost == 4:
+                            node.color = colors.FIVESPLIT_4
+                    else:
+                        node.color = node.prev_color
 
-def draw_gridlines(win, rows, width):
-    """
-    Draws horizontal/vertical lines across whole window, defining the grid.
-    
-    :param win: The pygame window in which to draw lines
-    :param rows: Number of rows/columns of nodes in the grid
-    :param width: Width/height of the pygame window being rendered to
-    """
-    gap = width // rows # Width/height of each node being rendered
-    for i in range(rows):
-        pygame.draw.line(win, colors.GREY, (0, i * gap), (width, i * gap))
-        for j in range(rows):
-            pygame.draw.line(win, colors.GREY, (j * gap, 0), (j * gap, width))
+    def make_grid(self):
+        """
+        Creates an nxn matrix of nodes and assigns it to self.grid.
+        """
+        self.grid = []
+        gap = self.width // self.rows  # Width/height of each node being rendered
+        for i in range(self.rows):
+            self.grid.append([])
+            for j in range(self.rows):
+                node = Node(i, j, gap, self.rows)
+                self.grid[i].append(node)
 
-def draw(win, grid, rows, width):
-    """
-    Master function to draw each frame in the window.
+    def draw_gridlines(self):
+        """
+        Draws horizontal/vertical lines across the whole window, defining the grid.
+        """
+        gap = self.width // self.rows  # Width/height of each node being rendered
+        for i in range(self.rows):
+            pygame.draw.line(self.win, colors.GREY, (0, i * gap), (self.width, i * gap))
+            for j in range(self.rows):
+                pygame.draw.line(self.win, colors.GREY, (j * gap, 0), (j * gap, self.width))
 
-    Layers each aspect on top of each other.
+    def draw(self):
+        """
+        Master function to draw each frame in the window.
 
-    White base -> Nodes -> Gridlines -> Coordinate text
-    
-    :param win: The pygame window in which to draw
-    :param grid: The nxn matrix of nodes 
-    :param rows: Number of rows of nodes in the grid
-    :param width: Width/height of the pygame window being rendered to
-    """
-    # Initially reset the entire window to white
-    win.fill(colors.WHITE)
+        Layers each aspect on top of each other:
+        White base -> Nodes -> Gridlines -> Coordinate text
+        """
+        # Initially reset the entire window to white
+        self.win.fill(colors.WHITE)
 
-    # Draw each node in the grid
-    for row in grid:
-        for node in row:
-            node.draw(win)
+        # Draw each node in the grid
+        for row in self.grid:
+            for node in row:
+                node.draw(self.win)
 
-    # Draw the gridlines on top of the nodes
-    draw_gridlines(win, rows, width)
+        # Draw the gridlines on top of the nodes
+        self.draw_gridlines()
 
-    # Draw coordinates of hovered node
-    mouse_x, mouse_y = pygame.mouse.get_pos()
-    if 0 <= mouse_x < width and 0 <= mouse_y < width:
-        row, col = get_clicked_pos((mouse_x, mouse_y), rows, width)
-        coord_text = f"({row}, {col})"
-        font = pygame.font.SysFont(None, 24)
-        text_surf = font.render(coord_text, True, (0, 0, 0))
+        # Draw coordinates of hovered node
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        if 0 <= mouse_x < self.width and 0 <= mouse_y < self.width:
+            row, col = self.get_clicked_pos((mouse_x, mouse_y))
+            coord_text = f"({row}, {col})"
+            font = pygame.font.SysFont(None, 24)
+            text_surf = font.render(coord_text, True, (0, 0, 0))
 
-        # Draw at different offset based on mouse x/y to prevent it rendering outside of the window
-        x_offset = -50 if row >= rows / 2 else 15
-        y_offset = -20 if col >= rows / 2 else 10
-        text_rect = text_surf.get_rect(topleft=(mouse_x + x_offset, mouse_y + y_offset))
-        win.blit(text_surf, text_rect)
-    
-    # Finally, render the updated window frame
-    pygame.display.update()
+            # Draw at different offset based on mouse x/y to prevent it rendering outside of the window
+            x_offset = -50 if row >= self.rows / 2 else 15
+            y_offset = -20 if col >= self.rows / 2 else 10
+            text_rect = text_surf.get_rect(topleft=(mouse_x + x_offset, mouse_y + y_offset))
+            self.win.blit(text_surf, text_rect)
+        
+        # Finally, render the updated window frame
+        pygame.display.update()
 
-def get_clicked_pos(pos, rows, width):
-    """
-    Get the row and column in the grid of the node that was just clicked
-    
-    :param pos: The y,x position of the cursor in the window provided by pygame
-    :param rows: Number of rows of nodes in the grid
-    :param width: Width/height of the pygame window being rendered to
-    """
-    gap = width // rows
-    y, x = pos
-    row = y // gap
-    col = x // gap
-    return row, col
+    def get_clicked_pos(self, pos):
+        """
+        Get the row and column in the grid of the node that was just clicked
+        
+        :param pos: The y,x position of the cursor in the window provided by pygame
+        """
+        gap = self.width // self.rows
+        y, x = pos
+        row = y // gap
+        col = x // gap
+        return row, col
 
-def load_map(grid, map_img):
-    """
-    Load in data from a pre-made map
-    
-    :param grid: The nxn matrix of nodes
-    :param map_img: PIL image object of the map
-    """
-    map_pixels = map_img.load()
-    for y in range(map_img.height):
-        for x in range(map_img.width):
-            if map_pixels[x,y] == colors.BLACK:
-                grid[x][y].set_barrier() 
-            elif map_pixels[x,y] == colors.FIVESPLIT_4:
-                grid[x][y].set_fivesplit4()
-            elif map_pixels[x,y] == colors.FIVESPLIT_3:
-                grid[x][y].set_fivesplit3()
-            elif map_pixels[x,y] == colors.FIVESPLIT_2:
-                grid[x][y].set_fivesplit2()
-            elif map_pixels[x,y] == colors.FIVESPLIT_1:
-                grid[x][y].set_fivesplit1()
+    def load_map(self):
+        """
+        Load in data from the pre-made map stored in self.map_img.
+        Does nothing if self.map_img is not set.
+        """
+        if not self.map_img:
+            return
+
+        map_pixels = self.map_img.load()
+        for y in range(self.map_img.height):
+            for x in range(self.map_img.width):
+                if map_pixels[x, y] == colors.BLACK:
+                    self.grid[x][y].set_barrier() 
+                elif map_pixels[x, y] == colors.FIVESPLIT_4:
+                    self.grid[x][y].set_fivesplit4()
+                elif map_pixels[x, y] == colors.FIVESPLIT_3:
+                    self.grid[x][y].set_fivesplit3()
+                elif map_pixels[x, y] == colors.FIVESPLIT_2:
+                    self.grid[x][y].set_fivesplit2()
+                elif map_pixels[x, y] == colors.FIVESPLIT_1:
+                    self.grid[x][y].set_fivesplit1()
