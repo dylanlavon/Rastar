@@ -24,11 +24,6 @@ class Grid:
     def __init__(self, rows, width, win, map_img=None):
         """
         Initialize the Grid class with required attributes.
-        
-        :param rows: Number of rows/columns in the grid
-        :param width: Width/height of the pygame window being rendered to
-        :param win: The pygame window surface
-        :param map_img: Optional PIL image object of the map to load
         """
         self.rows = rows
         self.width = width
@@ -36,31 +31,37 @@ class Grid:
         self.map_img = map_img
         self.grid = []
         
-        # Generate the grid immediately upon instantiation
+        self.show_search = True 
+        
+        # Guideline state tracking
+        self.show_guideline = True
+        self.global_route = []
+        
+        self.bg_surface = None
+        if self.map_img:
+            mode = self.map_img.mode
+            size = self.map_img.size
+            data = self.map_img.tobytes()
+            surface = pygame.image.fromstring(data, size, mode)
+            self.bg_surface = pygame.transform.scale(surface, (self.width, self.width))
+        
         self.make_grid()
 
     def toggle_search_area(self):
         """
-        Toggle all 'traversed' nodes between their 'searched' colors (red/green) 
-        and the original map's colors.
+        Toggle all A* search artifacts (red/green) on or off.
+        Because the Nodes now manage their own state, we simply flip the 
+        show_search boolean and ask them to recalculate their color!
         """
+        self.show_search = not self.show_search
+        
         for row in self.grid:
             for node in row:
-                if node.node_type == "traversed":
-                    if node.color == colors.GREEN or node.color == colors.RED:
-                        node.prev_color = node.color
-                        if node.extra_cost == 0:
-                            node.color = colors.WHITE
-                        elif node.extra_cost == 1:
-                            node.color = colors.FIVESPLIT_1
-                        elif node.extra_cost == 2:
-                            node.color = colors.FIVESPLIT_2
-                        elif node.extra_cost == 3:
-                            node.color = colors.FIVESPLIT_3
-                        elif node.extra_cost == 4:
-                            node.color = colors.FIVESPLIT_4
-                    else:
-                        node.color = node.prev_color
+                node.update_color(show_search=self.show_search)
+
+    def toggle_guideline(self):
+        """Toggle the visibility of the golden macro path."""
+        self.show_guideline = not self.show_guideline
 
     def make_grid(self):
         """
@@ -87,22 +88,18 @@ class Grid:
     def draw(self):
         """
         Master function to draw each frame in the window.
-
-        Layers each aspect on top of each other:
-        White base -> Nodes -> Gridlines -> Coordinate text
         """
-        # Initially reset the entire window to white
-        self.win.fill(colors.WHITE)
+        if self.bg_surface:
+            self.win.blit(self.bg_surface, (0, 0))
+        else:
+            self.win.fill(colors.WHITE)
 
-        # Draw each node in the grid
         for row in self.grid:
             for node in row:
                 node.draw(self.win)
 
-        # Draw the gridlines on top of the nodes
         self.draw_gridlines()
 
-        # Draw coordinates of hovered node
         mouse_x, mouse_y = pygame.mouse.get_pos()
         if 0 <= mouse_x < self.width and 0 <= mouse_y < self.width:
             row, col = self.get_clicked_pos((mouse_x, mouse_y))
@@ -110,13 +107,15 @@ class Grid:
             font = pygame.font.SysFont(None, 24)
             text_surf = font.render(coord_text, True, (0, 0, 0))
 
-            # Draw at different offset based on mouse x/y to prevent it rendering outside of the window
             x_offset = -50 if row >= self.rows / 2 else 15
             y_offset = -20 if col >= self.rows / 2 else 10
             text_rect = text_surf.get_rect(topleft=(mouse_x + x_offset, mouse_y + y_offset))
             self.win.blit(text_surf, text_rect)
+            
+        # Draw the guideline
+        if self.show_guideline and self.global_route and len(self.global_route) > 1:
+            pygame.draw.lines(self.win, (255, 215, 0), False, self.global_route, 4)
         
-        # Finally, render the updated window frame
         pygame.display.update()
 
     def get_clicked_pos(self, pos):
@@ -179,9 +178,7 @@ class Grid:
                     node = self.grid[x][y]
                     
                     # Prevent overwriting the rover's start/end markers
-                    # (Assume start/end logic has a node.is_start() or node.is_end() equivalent; 
-                    # otherwise, we check color or just proceed carefully)
-                    if node.color == colors.ORANGE or node.color == colors.TURQUOISE:
+                    if node.is_start() or node.is_end():
                         continue
                         
                     pixel_color = map_pixels[x, y]

@@ -23,7 +23,7 @@ class Node:
     """
     def __init__(self, row, col, width, total_rows):
         """
-        Initializs a grid node with position, size, and default traversal state.
+        Initializes a grid node with position, size, and default traversal state.
         
         :param row: Row index of the node in the grid
         :param col: Column index of the node in the grid
@@ -36,134 +36,158 @@ class Node:
         self.total_rows = total_rows
         self.x = row * width
         self.y = col * width
+        
+        # --- LOGICAL TERRAIN STATE ---
+        self.is_barrier_node = False
+        self.extra_cost = 0
+        
+        # --- A* SEARCH STATE ---
+        self.is_start_node = False
+        self.is_end_node = False
+        self.is_path_node = False
+        self.is_open_node = False
+        self.is_closed_node = False
+        
+        # --- RENDER STATE ---
         self.color = colors.WHITE
         self.neighbors = []
-        self.extra_cost = 0
-        self.prev_color = self.color
-        self.node_type = "untraversed"
         
     def get_pos(self):
         '''Returns the (row, column) position of the node.'''
         return self.row, self.col
     
+    # --- STATE GETTERS ---
     def is_closed(self):
-        '''Returns True if the node has been fully explored by the algorithm. (Node color is red)'''
-        return self.color == colors.RED
+        return self.is_closed_node
     
     def is_open(self):
-        '''Returns True if the node is currently in the open set. (Node color is green)'''
-        return self.color == colors.GREEN
+        return self.is_open_node
     
     def is_barrier(self):
-        '''Returns True if the node is an impassable barrier (Node color is black)'''
-        return self.color == colors.BLACK
-    
-    def is_fivesplit1(self):
-        '''Returns True if the node color matches FIVESPLIT_1'''
-        return self.color == colors.FIVESPLIT_1
-
-    def is_fivesplit2(self):
-        '''Returns True if the node color matches FIVESPLIT_2'''
-        return self.color == colors.FIVESPLIT_2
-
-    def is_fivesplit3(self):
-        '''Returns True if the node color matches FIVESPLIT_3'''
-        return self.color == colors.FIVESPLIT_3
-
-    def is_fivesplit4(self):
-        '''Returns True if the node color matches FIVESPLIT_4'''
-        return self.color == colors.FIVESPLIT_4
+        return self.is_barrier_node
     
     def is_start(self):
-        '''Returns True if the node is the start position (Node color is orange)'''
-        return self.color == colors.ORANGE
+        return self.is_start_node
     
     def is_end(self):
-        '''Returns True if the node is the end position (Node color is turquoise)'''
-        return self.color == colors.TURQUOISE
+        return self.is_end_node
     
     def is_path(self):
-        '''Returns True if the node is part of the final reconstructed path (Node color is purple)'''
-        return self.color == colors.PURPLE
-    
-    def reset(self):
-        """Resets the node to its default untraversed state (color=WHITE, extra_cost=0, node_type=untraversed)"""
-        self.color = colors.WHITE
-        self.extra_cost = 0
-        self.node_type = "untraversed"
+        return self.is_path_node
 
+    # --- STATE SETTERS ---
     def set_closed(self):
-        """Marks the node as closed and fully explored (color=RED, node_type=traversed)"""
-        self.color = colors.RED
-        self.node_type = "traversed"
+        self.is_closed_node = True
+        self.update_color()
 
     def set_open(self):
-        """Marks the node as open and discovered, but not fully explored (color=GREEN, node_type=traversed)"""
-        self.color = colors.GREEN
-        self.node_type = "traversed"
+        self.is_open_node = True
+        self.update_color()
     
     def set_barrier(self):
-        """Marks the node as an impassable barrier (color=BLACK, node_type=barrier)"""
-        self.color = colors.BLACK
-        self.node_type = "barrier"
+        self.reset_search_state() # Barriers shouldn't have search data
+        self.extra_cost = 0
+        self.is_barrier_node = True
+        self.update_color()
 
     def set_fivesplit1(self):
-        """Marks the node as low-cost weighted terrain (color=FIVESPLIT_1, extra_cost=1, node_type=untraversed)"""
-        self.color = colors.FIVESPLIT_1
+        self.is_barrier_node = False
         self.extra_cost = 1
-        self.node_type = "untraversed"
+        self.update_color()
     
     def set_fivesplit2(self):
-        """Marks the node as moderately weighted terrain (color=FIVESPLIT_2, extra_cost=2, node_type=untraversed)"""
-        self.color = colors.FIVESPLIT_2
+        self.is_barrier_node = False
         self.extra_cost = 2
-        self.node_type = "untraversed"
+        self.update_color()
 
     def set_fivesplit3(self):
-        """Marks the node as high-cost weighted terrain (color=FIVESPLIT_3, extra_cost=3, node_type=untraversed)"""
-        self.color = colors.FIVESPLIT_3
+        self.is_barrier_node = False
         self.extra_cost = 3
-        self.node_type = "untraversed"
+        self.update_color()
 
     def set_fivesplit4(self):
-        """Marks the node as very high-cost weighted terrain (color=FIVESPLIT_4, extra_cost=4, node_type=untraversed)"""
-        self.color = colors.FIVESPLIT_4
+        self.is_barrier_node = False
         self.extra_cost = 4
-        self.node_type = "untraversed"
+        self.update_color()
 
     def set_start(self):
-        """Marks the node as the start of the path (color=ORANGE, node_type=path)"""
-        self.color = colors.ORANGE
-        self.node_type = "path"
+        self.is_start_node = True
+        self.update_color()
     
     def set_end(self):
-        """Marks the node as the end of the path (color=TURQUOISE, node_type=path)"""
-        self.color = colors.TURQUOISE
-        self.node_type = "path"
+        self.is_end_node = True
+        self.update_color()
 
     def set_path(self):
-        """Marks the node as part of the final reconstructed path (color=PURPLE, node_type=path)"""
-        self.color = colors.PURPLE
-        self.node_type = "path"
+        self.is_start_node = False
+        self.is_end_node = False
+        self.is_path_node = True
+        self.update_color()
+
+    # --- RESET METHODS ---
+    def reset(self):
+        """Hard reset: Clears everything, turning the node back into plain white terrain."""
+        self.is_barrier_node = False
+        self.extra_cost = 0
+        self.reset_search_state()
+        
+    def reset_search_state(self):
+        """Soft reset: Clears only A* artifacts, preserving the underlying terrain."""
+        self.is_start_node = False
+        self.is_end_node = False
+        self.is_path_node = False
+        self.is_open_node = False
+        self.is_closed_node = False
+        self.update_color()
+
+    # --- THE MASTER RENDER LOGIC ---
+    def update_color(self, show_search=True):
+        """
+        Calculates the color of the node based on priority.
+        UI Elements (Start/End) > Path > Search Area > Terrain Weight > Empty Space.
+        
+        :param show_search: If False, hides the red/green A* search artifacts.
+        """
+        # 1. Highest Priority: Explicit Pathing Markers
+        if self.is_start_node:
+            self.color = colors.ORANGE
+        elif self.is_end_node:
+            self.color = colors.TURQUOISE
+        elif self.is_path_node:
+            self.color = colors.PURPLE
+            
+        # 2. Search Artifacts (Toggleable)
+        elif show_search and self.is_closed_node:
+            self.color = colors.RED
+        elif show_search and self.is_open_node:
+            self.color = colors.GREEN
+            
+        # 3. Base Terrain
+        elif self.is_barrier_node:
+            self.color = colors.BLACK
+        elif self.extra_cost == 1:
+            self.color = colors.FIVESPLIT_1
+        elif self.extra_cost == 2:
+            self.color = colors.FIVESPLIT_2
+        elif self.extra_cost == 3:
+            self.color = colors.FIVESPLIT_3
+        elif self.extra_cost == 4:
+            self.color = colors.FIVESPLIT_4
+            
+        # 4. Default Space
+        else:
+            self.color = colors.WHITE
 
     def draw(self, win):
         """
         Draws the node as a colored square on the given pygame surface
-        
-        :param win: Pygame surface to draw on
         """
-        pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.width))
+        if self.color != colors.WHITE:
+            pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.width))
 
     def update_neighbors(self, grid, heuristic):
         """
         Updates the list of valid neighboring nodes based on movement rules.
-
-        Cardinal movement is always allowed. Diagonal movement is allowed
-        unless using the Manhattan heuristic, and is blocked if it would
-        cut through a barrier corner.
-        
-        :param grid: The nxn matrix of nodes
-        :param heuristic: Heuristic being used (either 'manhattan', 'euclidean', or 'octile')
         """
         self.neighbors = []
         if heuristic == "manhattan":
