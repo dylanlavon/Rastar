@@ -7,7 +7,7 @@ Initially being developed for CENG 6332 (High Performance Computer Architecture)
 
 
 ## To Do:
-- [ ] Implement Single-heuristic D*
+- [X] Implement Single-heuristic D*
 - [ ] Add multi-heuristic support
 - - [ ] Mock lighting
 - - [ ] Mock slope
@@ -21,13 +21,21 @@ Initially being developed for CENG 6332 (High Performance Computer Architecture)
 In a new grid, the first left click will place the start node (teal). The second left click will place the goal node (orange). Any left clicks after these two nodes are placed will be barrier nodes (black).
 
 - Nodes can be erased by using right click.
-- A grid can be cleared by pressing the "C" key.
-- If running using a map, pressing "R" will reset to the initial state of that map.
-- After the algorithm completes, pressing "T" will toggle the search area, and will only show the start, end, and path nodes.
+- A grid can be cleared by pressing the **"C"** key.
+- If running using a map, pressing **"R"** will reset to the initial state of that map. *(Note: If viewing the dynamic map, pressing R will fully load its barriers, allowing for sandbox pathfinding on the high-resolution grid).*
+- After the algorithm completes, pressing **"T"** will toggle the search area, and will only show the start, end, and path nodes.
+- When running a dynamic simulation, pressing **"D"** toggles the view between the coarse global grid and the dynamic local grid.
+- Pressing **"G"** toggles the golden macro-path guideline overlay on the dynamic map.
 
-Hitting the spacebar will start the algorithm, as long as the start and goal nodes are placed on the grid.
+Hitting the **Spacebar** will start the algorithm, as long as the start and goal nodes are placed on the grid.
 
 After the algorithm completes, the elapsed time will display in the console output.
+
+**Hierarchical Dynamic Pathfinding (Sense, Plan, Act)**
+By supplying both *--use_map* (coarse global map) and *--dynamic* (high-resolution local map), the script simulates how real rovers navigate.
+1. The algorithm first calculates a global macro-route across the coarse map.
+2. The simulation then switches to the dynamic map, where the rover is initially "blind" to high-resolution obstacles.
+3. The rover executes a continuous loop: it sweeps its sensors (revealing hidden barriers), calculates a micro-path toward the next coarse waypoint, and drives forward.
 
 ---
 
@@ -37,6 +45,8 @@ Arguments:
 - _use_map_: The full name of an image in the _maps_ subdirectory. Defines barrier/empty nodes. Replaces the size of the grid if using _size_.
 - _path_only_: Supply two node locations in the form [X1 Y1 X2 Y2]. Running using this arg will only render the final path between these two nodes. Can be used with or without loading a map.
 - _precheck_: Runs a quick BFS to confirm that any path exists from the start node to the end node.
+- _dynamic_: Load a higher-resolution map image from the maps subdirectory to run the hierarchical "Sense, Plan, Act" simulation. Must be used in conjuction with *--use_map*.
+- _sensor_: Radius of the rover's sensor sweep when running a dynamic simulation. Defines how far the rover can "see" obstacles (default: 1, creating a 3x3 visibility grid).
 
 <br><br>
 ## Using img_to_grid.py

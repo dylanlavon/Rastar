@@ -50,8 +50,7 @@ class Grid:
     def toggle_search_area(self):
         """
         Toggle all A* search artifacts (red/green) on or off.
-        Because the Nodes now manage their own state, we simply flip the 
-        show_search boolean and ask them to recalculate their color!
+        Then, update their displayed color.
         """
         self.show_search = not self.show_search
         
@@ -60,7 +59,7 @@ class Grid:
                 node.update_color(show_search=self.show_search)
 
     def toggle_guideline(self):
-        """Toggle the visibility of the golden macro path."""
+        """Toggle the guideline when observing the dynamic map."""
         self.show_guideline = not self.show_guideline
 
     def make_grid(self):
@@ -89,17 +88,21 @@ class Grid:
         """
         Master function to draw each frame in the window.
         """
+        # 1. Draw the background surface if it exists
         if self.bg_surface:
             self.win.blit(self.bg_surface, (0, 0))
         else:
             self.win.fill(colors.WHITE)
 
+        # 2. Draw each node
         for row in self.grid:
             for node in row:
                 node.draw(self.win)
 
+        # 3. Draw the gridlines overlay
         self.draw_gridlines()
 
+        # 4. Draw the grid coordinates near the mouse cursor
         mouse_x, mouse_y = pygame.mouse.get_pos()
         if 0 <= mouse_x < self.width and 0 <= mouse_y < self.width:
             row, col = self.get_clicked_pos((mouse_x, mouse_y))
@@ -112,10 +115,11 @@ class Grid:
             text_rect = text_surf.get_rect(topleft=(mouse_x + x_offset, mouse_y + y_offset))
             self.win.blit(text_surf, text_rect)
             
-        # Draw the guideline
+        # 5. Draw the guideline
         if self.show_guideline and self.global_route and len(self.global_route) > 1:
             pygame.draw.lines(self.win, (255, 215, 0), False, self.global_route, 4)
         
+        # 6. Finally, update the display
         pygame.display.update()
 
     def get_clicked_pos(self, pos):

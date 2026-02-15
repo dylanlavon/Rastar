@@ -140,7 +140,7 @@ class Node:
         self.is_closed_node = False
         self.update_color()
 
-    # --- THE MASTER RENDER LOGIC ---
+    # --- MASTER RENDER LOGIC ---
     def update_color(self, show_search=True):
         """
         Calculates the color of the node based on priority.
