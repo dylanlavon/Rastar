@@ -209,16 +209,53 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True):
             dyn_grid.draw()
             
     # ==========================================
-    # 5: FINAL SIMULATION CLEANUP
+    # 5: FINAL SIMULATION CLEANUP & METRICS
     # ==========================================
     
-    print("Destination reached on the dynamic map!")
+    # Calculate Coarse Metrics
+    coarse_steps = len(coarse_path) - 1
+    coarse_terrain_cost = sum(node.extra_cost for node in coarse_path)
+    
+    # Calculate Dynamic Metrics
+    dyn_steps = len(historical_path) 
+    dyn_terrain_cost = sum(node.extra_cost for node in historical_path) + global_end_node.extra_cost
+
+    # Calculate Scaled and Normalized Metrics for fair comparison
+    equiv_coarse_steps = coarse_steps * scale
+    equiv_coarse_cost = coarse_terrain_cost * scale
+    
+    coarse_avg_severity = coarse_terrain_cost / max(1, coarse_steps)
+    dyn_avg_severity = dyn_terrain_cost / max(1, dyn_steps)
+
+    print("\n" + "="*50)
+    print("SUCCESS: Destination reached on the dynamic map!")
+    print("-" * 50)
+    print("PATHFINDING METRICS (Apples-to-Apples):")
+    print(f"Coarse Macro-Route (Scaled) : {equiv_coarse_steps} steps | Est. Terrain Penalty: {equiv_coarse_cost}")
+    print(f"Dynamic Micro-Route (Actual): {dyn_steps} steps | Actual Terrain Penalty: {dyn_terrain_cost}")
+    print("-" * 50)
+    print("TERRAIN SEVERITY (Normalized Cost Per Step):")
+    print(f"Expected Severity: {coarse_avg_severity:.2f} penalty/step")
+    print(f"Actual Severity  : {dyn_avg_severity:.2f} penalty/step")
+    print("="*50 + "\n")
 
     # Perform one last wipe of the search artifacts so the final UI presentation is completely clean
     for row in dyn_grid.grid:
         for node in row:
             if node.is_open_node or node.is_closed_node:
                 node.is_open_node = False
+                node.is_closed_node = False
+                node.update_color(show_search=dyn_grid.show_search)
+                
+    # Lock in the purple trail, the orange rover, and the turquoise destination
+    for node in historical_path:
+        node.set_path()
+        
+    rover_node.set_start()
+    global_end_node.set_end()
+    
+    # Always draw the final result once, regardless of the animate flag!
+    dyn_grid.draw()
 
 def main(win, width):
     parser = argparse.ArgumentParser()
