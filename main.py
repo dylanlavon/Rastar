@@ -21,7 +21,7 @@ MAPS_DIR = "maps"
 pygame.display.set_caption("Rover A* Pathfinding Tool")
 pygame.init()
 
-def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True):
+def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_coarse=False):
     """
     Executes a Hierarchical Pathfinding simulation using a 'Sense, Plan, Act' loop.
 
@@ -55,15 +55,20 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True):
         for node in row:
             node.update_neighbors(coarse_grid.grid, args.heuristic)
             
-    # Optional BFS precheck to ensure the global destination is actually reachable
     if args.precheck:
         algo.bfs_precheck(coarse_grid.start_pos, coarse_grid.end_pos)
         
-    # Run the initial A* algorithm silently (no drawing) to get the global route
-    coarse_path = algo.algorithm(lambda: None, coarse_grid.grid, coarse_grid.start_pos, coarse_grid.end_pos, args.heuristic)
+    # Conditionally draw the coarse map search
+    draw_func = (lambda: coarse_grid.draw()) if vis_coarse else (lambda: None)
+    coarse_path = algo.algorithm(draw_func, coarse_grid.grid, coarse_grid.start_pos, coarse_grid.end_pos, args.heuristic)
+    
     if not coarse_path:
         print("ERR: No valid path found on the coarse grid.")
         return
+        
+    # Pause briefly so the user can admire the macro-route before we swap maps
+    if vis_coarse and animate:
+        pygame.time.delay(1200)
 
     # Extract the exact pixel coordinates of the coarse path to draw the golden macro-guideline
     gps_guideline = []
@@ -198,7 +203,7 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True):
                     node.is_closed_node = False
                     node.update_color(show_search=dyn_grid.show_search)
         
-        # The cleanup loop above might have accidentally wiped parts of our purple trail; repaint it!
+        # The cleanup loop above might have accidentally wiped parts of our purple trail; repaint it
         for node in historical_path:
             node.set_path()
         
@@ -254,55 +259,84 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True):
     rover_node.set_start()
     global_end_node.set_end()
     
-    # Always draw the final result once, regardless of the animate flag!
+    # Always draw the final result once, regardless of the animate flag
     dyn_grid.draw()
 
 def main(win, width):
     parser = argparse.ArgumentParser()
     parser.add_argument("heuristic", type=str, choices=["manhattan", "euclidean", "octile"], help="Choose the heuristic function.")
-    parser.add_argument("--size", type=int, default=50, help="Grid size. Grid is square, so 'size' value will apply to height AND width of the grid.")
-    parser.add_argument("--use_map", type=str, help="Choose an image to use for a predefined map. Image dimensions required to match grid size. Overrides --size.")
-    parser.add_argument("--path_only", type=int, nargs="+", help="Enter two points in the form [X1 Y1 X2 Y2]. Will only display the final path.")
-    parser.add_argument("--dynamic", type=str, help="Load a higher-resolution map that updates the path after each move. Only use with --use_map.")
-    parser.add_argument("--sensor", type=int, default=1, help="Radius of the rover's sensor sweep (default: 1).")
-    parser.add_argument("-p", "--precheck", action="store_true", help="Run a BFS precheck to confirm that the start node can reach the end node")
+    parser.add_argument("--dynamic", type=str, help="Load a higher-resolution map.")
+    parser.add_argument("--sensor", type=int, default=1, help="Radius of the rover's sensor sweep.")
+    parser.add_argument("-p", "--precheck", action="store_true", help="Run a BFS precheck.")
+
+    size_excl_group = parser.add_mutually_exclusive_group()
+    size_excl_group.add_argument("--size", type=int, default=50, help="Grid size.")
+    size_excl_group.add_argument("--use_map", type=str, help="Choose an image to use for a predefined map.")
+ 
+    mode_excl_group = parser.add_mutually_exclusive_group()
+    mode_excl_group.add_argument("--path_only", type=int, nargs="+", help="Enter two points in the form [X1 Y1 X2 Y2].")
+    mode_excl_group.add_argument("--mode", type=str, choices=["sandbox", "fast", "full"], 
+                                 help="Execution Mode. 'sandbox': Free play. 'fast': Silent Coarse -> Vis Dynamic. 'full': Vis Coarse -> Vis Dynamic.")
+    
     args = parser.parse_args()
 
-    map_img = None  
-    dyn_map_img = None
-    dyn_map_size = None
+    # ==========================================
+    # INPUT VALIDATION & PATH ROUTING
+    # ==========================================
+    
+    if args.path_only:
+        if len(args.path_only) != 4:
+            parser.error("ERR: Invalid number of supplied values.")
+        for coord in args.path_only:
+            if coord >= args.size or coord < 0:
+                parser.error("ERR: Invalid coord in --path_only.")
 
+    # 1. Handle Coarse Map Routing
+    map_path = None
     if args.use_map:
         map_path = os.path.join(MAPS_DIR, args.use_map)
         if not os.path.exists(map_path):
-            print(f"ERR: Could not find the map image at: {args.use_map}")
-            quit()
+            parser.error(f"ERR: Could not find the map image at: {args.use_map}")
+
+    # 2. Handle Dynamic Map Routing and Dependencies
+    dyn_map_path = None
+    if args.dynamic:
+        if not args.use_map:
+            parser.error("ERR: Dynamic mode must be used in conjunction with a coarse map (--use_map).")
+        
+        dyn_map_path = os.path.join(MAPS_DIR, args.dynamic)
+        if not os.path.exists(dyn_map_path):
+            parser.error(f"ERR: Could not find the dynamic map image at: {args.dynamic}")
+    else:
+        # If NOT using dynamic, forbid dynamic-only flags
+        if args.sensor != 1: 
+            parser.error("--sensor can only be used in conjunction with the --dynamic flag.")
+        if args.mode is not None:
+            parser.error("--mode can only be used in conjunction with the --dynamic flag.")
+    
+    # ==========================================
+    # INITIALIZE PARAMETERS
+    # ==========================================
+    
+    # Safely set the default mode if the user didn't explicitly provide one
+    if not args.mode:
+        args.mode = "fast"
+        
+    map_img = None  
+    dyn_map_img = None
+    dyn_map_size = None
+    
+    if args.use_map:
         map_img = Image.open(map_path)
         args.size = map_img.width
 
     if args.dynamic:
-        if not args.use_map:
-            print(f"ERR: Dynamic mode should only be used when loading a map using --use_map.")
-            quit()
-        dyn_map_path = os.path.join(MAPS_DIR, args.dynamic)
-        if not os.path.exists(dyn_map_path):
-            print(f"ERR: Could not find the dynamic map image at: {args.dynamic}")
-            quit()
         dyn_map_img = Image.open(dyn_map_path)
         dyn_map_size = dyn_map_img.width
 
-    if args.path_only:
-        if len(args.path_only) != 4:
-            print("ERR: Invalid number of supplied values.")
-            quit()
-        for coord in args.path_only:
-            if coord >= args.size or coord < 0:
-                print("ERR: Invalid coord in --path_only.")
-                quit()
-
     coarse_grid = grid_manager.Grid(args.size, width, win, map_img)
     coarse_grid.start_pos = None
-    coarse_grid.end_pos = None
+    coarse_grid.end_pos = None 
     if args.use_map:
         coarse_grid.load_map()
 
@@ -311,6 +345,8 @@ def main(win, width):
         dyn_grid = grid_manager.Grid(dyn_map_size, width, win, dyn_map_img)
         dyn_grid.start_pos = None
         dyn_grid.end_pos = None
+        if args.mode == "sandbox":
+            dyn_grid.load_map()
         
     active_grid = coarse_grid
     grid = active_grid.grid
@@ -373,68 +409,76 @@ def main(win, width):
                     active_grid.end_pos = None
 
             if event.type == pygame.KEYDOWN:
+                
+                # --- START PATHFINDING ---
                 if event.key == pygame.K_SPACE and active_grid.start_pos and active_grid.end_pos:
-                    if dyn_grid and active_grid == coarse_grid:
-                        active_grid = dyn_grid
-                        grid = active_grid.grid
-                        execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True)
-                    else:
+                    
+                    if args.mode == "sandbox" or not dyn_grid:
+                        # Standard A* on whichever map you are currently looking at
                         for row in grid:
                             for node in row:
                                 node.update_neighbors(grid, args.heuristic)
-
                         if args.precheck:
                             algo.bfs_precheck(active_grid.start_pos, active_grid.end_pos)
-
                         algo.algorithm(lambda: active_grid.draw(), grid, active_grid.start_pos, active_grid.end_pos, args.heuristic)
 
+                    elif args.mode == "fast":
+                        if dyn_grid and active_grid == coarse_grid:
+                            active_grid = dyn_grid
+                            grid = active_grid.grid
+                            execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_coarse=False)
+
+                    elif args.mode == "full":
+                        if dyn_grid and active_grid == coarse_grid:
+                            active_grid = dyn_grid
+                            grid = active_grid.grid
+                            execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_coarse=True)
+
+                # --- TOGGLE MAPS ---
                 if event.key == pygame.K_d and dyn_grid:
                     active_grid = dyn_grid if active_grid == coarse_grid else coarse_grid
                     grid = active_grid.grid
 
+                # --- CLEAR GRIDS (Soft Reset) ---
                 if event.key == pygame.K_c:
                     if active_grid == coarse_grid:
                         coarse_grid = grid_manager.Grid(args.size, width, WIN)
-                        coarse_grid.start_pos = None
-                        coarse_grid.end_pos = None
+                        coarse_grid.start_pos, coarse_grid.end_pos = None, None
                         active_grid = coarse_grid
-                        
                         if dyn_grid:
                             dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
-                            dyn_grid.start_pos = None
-                            dyn_grid.end_pos = None
+                            dyn_grid.start_pos, dyn_grid.end_pos = None, None
                     else:
                         dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN)
-                        dyn_grid.start_pos = None
-                        dyn_grid.end_pos = None
+                        dyn_grid.start_pos, dyn_grid.end_pos = None, None
                         active_grid = dyn_grid
                     grid = active_grid.grid
 
+                # --- RELOAD GRIDS (Hard Reset) ---
                 if event.key == pygame.K_r:
                     if active_grid == coarse_grid:
                         coarse_grid = grid_manager.Grid(args.size, width, WIN, map_img)
-                        coarse_grid.start_pos = None
-                        coarse_grid.end_pos = None
+                        coarse_grid.start_pos, coarse_grid.end_pos = None, None
                         if args.use_map:
                             coarse_grid.load_map()
                         active_grid = coarse_grid
                         
                         if dyn_grid:
                             dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
-                            dyn_grid.start_pos = None
-                            dyn_grid.end_pos = None
+                            dyn_grid.start_pos, dyn_grid.end_pos = None, None
+                            # Reload dynamic map if in sandbox mode
+                            if args.mode == "sandbox":
+                                dyn_grid.load_map()
                     else:
                         dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
-                        dyn_grid.start_pos = None
-                        dyn_grid.end_pos = None
+                        dyn_grid.start_pos, dyn_grid.end_pos = None, None
                         dyn_grid.load_map() 
                         active_grid = dyn_grid
                     grid = active_grid.grid
 
+                # --- TOGGLES ---
                 if event.key == pygame.K_t:
                     active_grid.toggle_search_area()
-                
-                # Catch 'g' in the main loop to toggle the guideline
                 if event.key == pygame.K_g:
                     active_grid.toggle_guideline()
 
