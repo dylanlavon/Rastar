@@ -21,7 +21,7 @@ MAPS_DIR = "maps"
 pygame.display.set_caption("Rover A* Pathfinding Tool")
 pygame.init()
 
-def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
+def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True):
     """
     Executes a Hierarchical Pathfinding simulation using a 'Sense, Plan, Act' loop.
 
@@ -42,6 +42,7 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
     :param coarse_grid: The Grid object representing the global, low-resolution map.
     :param dyn_grid: The Grid object representing the local, high-resolution map.
     :param args: Parsed command-line arguments containing configuration data (e.g., .heuristic, .precheck, .sensor).
+    :param animate: Boolean controlling whether the pathfinding execution renders to the display frame-by-frame.
     """
     print("Starting Dynamic Hierarchical Pathfinding...")
     
@@ -109,15 +110,16 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
     for waypoint in coarse_path[1:]:
         
         # Keep the Pygame window responsive so it doesn't freeze or crash during the loop
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            # Allow the user to toggle the golden guideline mid-simulation
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_g:
-                    dyn_grid.toggle_guideline()
-                    dyn_grid.draw()
+        if animate:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                # Allow the user to toggle the golden guideline mid-simulation
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_g:
+                        dyn_grid.toggle_guideline()
+                        dyn_grid.draw()
 
         # Calculate the literal physical boundaries (bounding box) of the next coarse node block
         min_x = int(waypoint.row * scale)
@@ -148,8 +150,9 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
         dyn_grid.sensor_sweep(rover_node, radius=args.sensor)
                 
         # --- PLAN ---
-        # Run A* locally to figure out how to get to the bounding box edge, animating the search (red/green)
-        local_path = algo.algorithm(lambda: dyn_grid.draw(), dyn_grid.grid, rover_node, target_node, args.heuristic)
+        # Run A* locally to figure out how to get to the bounding box edge, animating the search if enabled
+        draw_func = (lambda: dyn_grid.draw()) if animate else (lambda: None)
+        local_path = algo.algorithm(draw_func, dyn_grid.grid, rover_node, target_node, args.heuristic)
         
         # If A* fails locally, the terrain is impassable
         if not local_path or len(local_path) < 2:
@@ -160,14 +163,15 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
         # Drive the rover step-by-step along the localized path we just generated
         for step_node in local_path[1:]:
             
-            # Keep the window responsive during the driving animation
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    quit()
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_g:
-                        dyn_grid.toggle_guideline()
+            if animate:
+                # Keep the window responsive during the driving animation
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        quit()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_g:
+                            dyn_grid.toggle_guideline()
             
             # Save the node we are currently standing on to our permanent trail
             historical_path.append(rover_node)
@@ -177,9 +181,10 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
             rover_node = step_node
             rover_node.set_start()     # Color the new node orange
             
-            # Render the frame and pause briefly to animate the movement
-            dyn_grid.draw()
-            pygame.time.delay(10)      
+            if animate:
+                # Render the frame and pause briefly to animate the movement
+                dyn_grid.draw()
+                pygame.time.delay(10)      
         
         # ==========================================
         # 4: LOCAL CLEANUP
@@ -199,7 +204,9 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
         
         # Ensure the final ultimate destination marker is still visible
         global_end_node.set_end()
-        dyn_grid.draw()
+        
+        if animate:
+            dyn_grid.draw()
             
     # ==========================================
     # 5: FINAL SIMULATION CLEANUP
@@ -212,16 +219,6 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args):
         for node in row:
             if node.is_open_node or node.is_closed_node:
                 node.is_open_node = False
-                node.is_closed_node = False
-                node.update_color(show_search=dyn_grid.show_search)
-                
-    # Lock in the purple trail, the orange rover, and the turquoise destination
-    for node in historical_path:
-        node.set_path()
-        
-    rover_node.set_start()
-    global_end_node.set_end()
-    dyn_grid.draw()
 
 def main(win, width):
     parser = argparse.ArgumentParser()
@@ -294,7 +291,7 @@ def main(win, width):
             WIN = pygame.display.set_mode((width, width))
             active_grid.win = WIN
             active_grid.draw()
-            execute_dynamic_pathfinding(coarse_grid, dyn_grid, args)
+            execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=False)
         else:
             for row in coarse_grid.grid:
                 for node in row:
@@ -343,7 +340,7 @@ def main(win, width):
                     if dyn_grid and active_grid == coarse_grid:
                         active_grid = dyn_grid
                         grid = active_grid.grid
-                        execute_dynamic_pathfinding(coarse_grid, dyn_grid, args)
+                        execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True)
                     else:
                         for row in grid:
                             for node in row:
