@@ -9,6 +9,7 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import pygame
 import argparse
 import itertools
+import yaml
 from PIL import Image
 
 # Internal dependencies
@@ -19,6 +20,7 @@ import algo
 WIDTH = 1000
 WIN = pygame.display.set_mode((WIDTH, WIDTH))
 MAPS_DIR = "maps"
+CONFIG_DIR = "config"
 pygame.display.set_caption("Rover A* Pathfinding Tool")
 pygame.init()
 
@@ -317,7 +319,11 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
 
 def main(win, width):
     parser = argparse.ArgumentParser()
-    parser.add_argument("heuristic", type=str, choices=["manhattan", "euclidean", "octile"], help="Choose the heuristic function.")
+    
+    # NEW: We make heuristic optional (nargs="?") so it doesn't crash if we provide it via YAML instead of CLI
+    parser.add_argument("heuristic", type=str, nargs="?", choices=["manhattan", "euclidean", "octile"], help="Choose the heuristic function.")
+    parser.add_argument("--config", type=str, help="Path to a YAML configuration file.")
+    
     parser.add_argument("--dynamic", type=str, help="Load a higher-resolution map.")
     parser.add_argument("--sensor", type=int, default=1, help="Radius of the rover's sensor sweep.")
     parser.add_argument("-p", "--precheck", action="store_true", help="Run a BFS precheck.")
@@ -327,11 +333,34 @@ def main(win, width):
     size_excl_group.add_argument("--use_map", type=str, help="Choose an image to use for a predefined map.")
  
     mode_excl_group = parser.add_mutually_exclusive_group()
-    mode_excl_group.add_argument("--path_only", type=int, nargs="+", help="Enter two points in the form [X1 Y1 X2 Y2].")
+    mode_excl_group.add_argument("--path_only", type=int, nargs="+", help="Enter two points in the form [X1 Y1 X2 Y2 ...].")
     mode_excl_group.add_argument("--mode", type=str, choices=["sandbox", "fast", "full"], 
                                  help="Execution Mode. 'sandbox': Free play. 'fast': Silent Coarse -> Vis Dynamic. 'full': Vis Coarse -> Vis Dynamic.")
     
+    # ==========================================
+    # YAML CONFIGURATION INJECTION
+    # ==========================================
+    # 1. Parse *only* known arguments first to see if a --config flag was passed
+    temp_args, remaining_argv = parser.parse_known_args()
+    
+    # 2. If a config file exists, route it to the config directory, load it, and inject defaults
+    if temp_args.config:
+        config_path = os.path.join(CONFIG_DIR, temp_args.config)
+        
+        if not os.path.exists(config_path):
+            parser.error(f"ERR: Could not find configuration file at: {config_path}")
+            
+        with open(config_path, 'r') as file:
+            config_data = yaml.safe_load(file)
+            if config_data:
+                parser.set_defaults(**config_data)
+                
+    # 3. Parse EVERYTHING. Any explicitly typed CLI flags will automatically override the YAML defaults!
     args = parser.parse_args()
+    
+    # 4. Final check to ensure a heuristic was provided (either via YAML or CLI)
+    if not args.heuristic:
+        parser.error("ERR: A heuristic must be provided either via the command line or a YAML config file.")
 
     # ==========================================
     # INPUT VALIDATION & PATH ROUTING
