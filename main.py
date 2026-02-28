@@ -236,7 +236,7 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
     print("SUCCESS: Destination reached on the dynamic map!")
     print("-" * 50)
     print("PATHFINDING METRICS (Apples-to-Apples):")
-    print(f"Coarse Macro-Route (Scaled) : {equiv_coarse_steps} steps | Est. Terrain Penalty: {equiv_coarse_cost}")
+    print(f"Coarse Macro-Route (Scaled) : {int(equiv_coarse_steps)} steps | Est. Terrain Penalty: {int(equiv_coarse_cost)}")
     print(f"Dynamic Micro-Route (Actual): {dyn_steps} steps | Actual Terrain Penalty: {dyn_terrain_cost}")
     print("-" * 50)
     print("TERRAIN SEVERITY (Normalized Cost Per Step):")
@@ -351,12 +351,26 @@ def main(win, width):
     active_grid = coarse_grid
     grid = active_grid.grid
 
+    # ==========================================
+    # INITIALIZE UI BRUSH STATE & TSP LISTS
+    # ==========================================
+    selected_brush = 'Barrier (5)' 
+    coarse_grid.destinations = []
+    if dyn_grid:
+        dyn_grid.destinations = []
+    active_grid.selected_brush = selected_brush
+
     if args.path_only:
         x1, y1, x2, y2 = args.path_only
         coarse_grid.start_pos = coarse_grid.grid[x1][y1]
         coarse_grid.start_pos.set_start()
-        coarse_grid.end_pos = coarse_grid.grid[x2][y2]
-        coarse_grid.end_pos.set_end()
+        
+        # Assign to the new destinations list instead of end_pos
+        dest_node = coarse_grid.grid[x2][y2]
+        coarse_grid.destinations.append(dest_node)
+        dest_node.set_end()
+        # Ensure algo.algorithm still has a single target for now
+        coarse_grid.end_pos = dest_node 
 
         if dyn_grid:
             active_grid = dyn_grid
@@ -385,33 +399,35 @@ def main(win, width):
             if event.type == pygame.QUIT:
                 run = False
 
-            if pygame.mouse.get_pressed()[0]:
-                pos = pygame.mouse.get_pos()
-                row, col = active_grid.get_clicked_pos(pos)
-                node = grid[row][col]
-                if not active_grid.start_pos and node != active_grid.end_pos:
-                    active_grid.start_pos = node
-                    active_grid.start_pos.set_start()
-                elif not active_grid.end_pos and node != active_grid.start_pos:
-                    active_grid.end_pos = node
-                    active_grid.end_pos.set_end()
-                elif node != active_grid.start_pos and node != active_grid.end_pos:
-                    node.set_barrier()
-
-            elif pygame.mouse.get_pressed()[2]:
-                pos = pygame.mouse.get_pos()
-                row, col = active_grid.get_clicked_pos(pos)
-                node = grid[row][col]
-                node.reset()
-                if node == active_grid.start_pos:
-                    active_grid.start_pos = None
-                if node == active_grid.end_pos:
-                    active_grid.end_pos = None
-
+            # ==========================================
+            # KEYBOARD EVENTS
+            # ==========================================
             if event.type == pygame.KEYDOWN:
                 
+                # --- CHANGE BRUSH TYPE (0-5, 9) ---
+                if event.key == pygame.K_9:
+                    selected_brush = 'Start (9)'
+                elif event.key == pygame.K_0:
+                    selected_brush = 'Dest (0)'
+                elif event.key == pygame.K_1:
+                    selected_brush = 'Cost 1'
+                elif event.key == pygame.K_2:
+                    selected_brush = 'Cost 2'
+                elif event.key == pygame.K_3:
+                    selected_brush = 'Cost 3'
+                elif event.key == pygame.K_4:
+                    selected_brush = 'Cost 4'
+                elif event.key == pygame.K_5:
+                    selected_brush = 'Barrier (5)'
+                
+                # Update the active grid so it can draw the text!
+                active_grid.selected_brush = selected_brush
+                
                 # --- START PATHFINDING ---
-                if event.key == pygame.K_SPACE and active_grid.start_pos and active_grid.end_pos:
+                # NOTE: For now, we just use active_grid.destinations[0] to keep single-target A* working until TSP is built
+                if event.key == pygame.K_SPACE and active_grid.start_pos and len(active_grid.destinations) > 0:
+                    
+                    active_grid.end_pos = active_grid.destinations[0]
                     
                     if args.mode == "sandbox" or not dyn_grid:
                         # Standard A* on whichever map you are currently looking at
@@ -438,49 +454,108 @@ def main(win, width):
                 if event.key == pygame.K_d and dyn_grid:
                     active_grid = dyn_grid if active_grid == coarse_grid else coarse_grid
                     grid = active_grid.grid
+                    # Ensure the brush state follows to the newly active map
+                    active_grid.selected_brush = selected_brush
 
                 # --- CLEAR GRIDS (Soft Reset) ---
                 if event.key == pygame.K_c:
                     if active_grid == coarse_grid:
                         coarse_grid = grid_manager.Grid(args.size, width, WIN)
-                        coarse_grid.start_pos, coarse_grid.end_pos = None, None
+                        coarse_grid.start_pos = None
+                        coarse_grid.destinations = []
                         active_grid = coarse_grid
                         if dyn_grid:
                             dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
-                            dyn_grid.start_pos, dyn_grid.end_pos = None, None
+                            dyn_grid.start_pos = None
+                            dyn_grid.destinations = []
                     else:
                         dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN)
-                        dyn_grid.start_pos, dyn_grid.end_pos = None, None
+                        dyn_grid.start_pos = None
+                        dyn_grid.destinations = []
                         active_grid = dyn_grid
                     grid = active_grid.grid
+                    active_grid.selected_brush = selected_brush
 
                 # --- RELOAD GRIDS (Hard Reset) ---
                 if event.key == pygame.K_r:
                     if active_grid == coarse_grid:
                         coarse_grid = grid_manager.Grid(args.size, width, WIN, map_img)
-                        coarse_grid.start_pos, coarse_grid.end_pos = None, None
+                        coarse_grid.start_pos = None
+                        coarse_grid.destinations = []
                         if args.use_map:
                             coarse_grid.load_map()
                         active_grid = coarse_grid
                         
                         if dyn_grid:
                             dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
-                            dyn_grid.start_pos, dyn_grid.end_pos = None, None
+                            dyn_grid.start_pos = None
+                            dyn_grid.destinations = []
                             # Reload dynamic map if in sandbox mode
                             if args.mode == "sandbox":
                                 dyn_grid.load_map()
                     else:
                         dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
-                        dyn_grid.start_pos, dyn_grid.end_pos = None, None
+                        dyn_grid.start_pos = None
+                        dyn_grid.destinations = []
                         dyn_grid.load_map() 
                         active_grid = dyn_grid
                     grid = active_grid.grid
+                    active_grid.selected_brush = selected_brush
 
                 # --- TOGGLES ---
                 if event.key == pygame.K_t:
                     active_grid.toggle_search_area()
                 if event.key == pygame.K_g:
                     active_grid.toggle_guideline()
+
+            # ==========================================
+            # MOUSE EVENTS
+            # ==========================================
+            
+            # --- LEFT CLICK (PAINT) ---
+            if pygame.mouse.get_pressed()[0]:
+                pos = pygame.mouse.get_pos()
+                row, col = active_grid.get_clicked_pos(pos)
+                
+                if 0 <= row < active_grid.rows and 0 <= col < active_grid.rows:
+                    node = grid[row][col]
+                    
+                    if selected_brush == 'Start (9)':
+                        if active_grid.start_pos:
+                            active_grid.start_pos.reset() # Erase old start
+                        active_grid.start_pos = node
+                        node.set_start()
+                        
+                    elif selected_brush == 'Dest (0)':
+                        if node not in active_grid.destinations and node != active_grid.start_pos:
+                            active_grid.destinations.append(node)
+                            node.set_end()
+                            
+                    elif selected_brush == 'Barrier (5)':
+                        if node != active_grid.start_pos and node not in active_grid.destinations:
+                            node.set_barrier()
+                            
+                    elif selected_brush.startswith('Cost'):
+                        if node != active_grid.start_pos and node not in active_grid.destinations:
+                            # Extract the integer from the string (e.g., 'Cost 3' -> 3)
+                            weight = int(selected_brush.split(' ')[1])
+                            node.extra_cost = weight
+                            node.is_barrier_node = False
+                            node.update_color(show_search=active_grid.show_search)
+
+            # --- RIGHT CLICK (ERASE) ---
+            elif pygame.mouse.get_pressed()[2]:
+                pos = pygame.mouse.get_pos()
+                row, col = active_grid.get_clicked_pos(pos)
+                
+                if 0 <= row < active_grid.rows and 0 <= col < active_grid.rows:
+                    node = grid[row][col]
+                    node.reset()
+                    
+                    if node == active_grid.start_pos:
+                        active_grid.start_pos = None
+                    if node in active_grid.destinations:
+                        active_grid.destinations.remove(node)
 
     pygame.quit()
 

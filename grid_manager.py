@@ -102,21 +102,34 @@ class Grid:
         # 3. Draw the gridlines overlay
         self.draw_gridlines()
 
-        # 4. Draw the grid coordinates near the mouse cursor
+        # 4. Draw the grid coordinates and selected brush near the mouse cursor
         mouse_x, mouse_y = pygame.mouse.get_pos()
         if 0 <= mouse_x < self.width and 0 <= mouse_y < self.width:
             row, col = self.get_clicked_pos((mouse_x, mouse_y))
-            coord_text = f"({row}, {col})"
+            
+            # Fetch the current brush state (defaulting to Barrier if not set)
+            brush_type = getattr(self, 'selected_brush', 'Barrier (5)')
+            coord_text = f"[{row}, {col}] | Brush: {brush_type}"
+            
             font = pygame.font.SysFont(None, 24)
             text_surf = font.render(coord_text, True, (0, 0, 0))
 
-            x_offset = -50 if row >= self.rows / 2 else 15
-            y_offset = -20 if col >= self.rows / 2 else 10
+            # Dynamically shift the text left based on its exact width to prevent clipping
+            x_offset = -(text_surf.get_width() + 10) if row >= self.rows / 2 else 15
+            y_offset = -20 if col >= self.rows / 2 else 15
+            
             text_rect = text_surf.get_rect(topleft=(mouse_x + x_offset, mouse_y + y_offset))
+            
+            # Optional UI Polish: Draw a subtle white background box so text is readable over dark terrain
+            bg_rect = text_rect.copy()
+            bg_rect.inflate_ip(6, 4) # Add 3px padding on sides, 2px on top/bottom
+            pygame.draw.rect(self.win, (255, 255, 255), bg_rect)
+            pygame.draw.rect(self.win, (0, 0, 0), bg_rect, 1) # Add a 1px black border
+            
             self.win.blit(text_surf, text_rect)
             
         # 5. Draw the guideline
-        if self.show_guideline and self.global_route and len(self.global_route) > 1:
+        if getattr(self, 'show_guideline', False) and getattr(self, 'global_route', None) and len(self.global_route) > 1:
             pygame.draw.lines(self.win, (255, 215, 0), False, self.global_route, 4)
         
         # 6. Finally, update the display
