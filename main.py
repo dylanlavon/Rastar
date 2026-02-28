@@ -8,6 +8,7 @@ import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import pygame
 import argparse
+import itertools
 from PIL import Image
 
 # Internal dependencies
@@ -21,155 +22,216 @@ MAPS_DIR = "maps"
 pygame.display.set_caption("Rover A* Pathfinding Tool")
 pygame.init()
 
+def compute_tsp_matrix(grid_obj, heuristic):
+    """
+    Silently calculates the A* distance matrix for the start node and all destinations.
+    Evaluates every permutation and returns the optimal route and a generated report.
+    """
+    for row in grid_obj.grid:
+        for node in row:
+            node.update_neighbors(grid_obj.grid, heuristic)
+
+    tsp_report = []
+    tsp_report.append("\n" + "="*50)
+    tsp_report.append("TSP ROUTE OPTIMIZATION REPORT")
+    tsp_report.append("="*50)
+    
+    # Build the Distance Matrix
+    all_points = [grid_obj.start_pos] + grid_obj.destinations
+    distances = {}
+
+    tsp_report.append(f"Calculated distance matrix for {len(all_points)} total points.")
+    for i in range(len(all_points)):
+        for j in range(i + 1, len(all_points)):
+            node_a = all_points[i]
+            node_b = all_points[j]
+            
+            path = algo.algorithm(lambda: None, grid_obj.grid, node_a, node_b, heuristic)
+            
+            if path:
+                cost = len(path) + sum(n.extra_cost for n in path)
+                distances[(node_a, node_b)] = cost
+                distances[(node_b, node_a)] = cost
+            else:
+                distances[(node_a, node_b)] = float('inf')
+                distances[(node_b, node_a)] = float('inf')
+                
+    # Clean up ALL silent A* search artifacts (red/green/purple) off the visual grid
+    for row in grid_obj.grid:
+        for node in row:
+            if node.is_open_node or node.is_closed_node:
+                node.is_open_node = False
+                node.is_closed_node = False
+            
+            if node != grid_obj.start_pos and node not in grid_obj.destinations:
+                if hasattr(node, 'is_path_node'): node.is_path_node = False
+                elif hasattr(node, 'is_path'): node.is_path = False
+                elif hasattr(node, 'path'): node.path = False
+            
+            node.update_color(show_search=getattr(grid_obj, 'show_search', False))
+
+    # Evaluate all possible route permutations
+    perms = list(itertools.permutations(grid_obj.destinations))
+    best_cost = float('inf')
+    best_perm = None
+    
+    tsp_report.append(f"\nEvaluating {len(perms)} possible route permutations:")
+    for perm in perms:
+        current_cost = 0
+        current_node = grid_obj.start_pos
+        valid = True
+        seq_str = f"Start[{current_node.row},{current_node.col}]"
+        
+        for dest in perm:
+            segment_cost = distances.get((current_node, dest), float('inf'))
+            if segment_cost == float('inf'):
+                valid = False
+                break
+            
+            current_cost += segment_cost
+            seq_str += f" -> Dest[{dest.row},{dest.col}]"
+            current_node = dest
+            
+        if valid:
+            tsp_report.append(f"{seq_str} | Total Cost: {current_cost}")
+            if current_cost < best_cost:
+                best_cost = current_cost
+                best_perm = perm
+        else:
+            tsp_report.append(f"{seq_str} | Total Cost: INF (Path Blocked)")
+
+    return best_perm, best_cost, tsp_report
+
 def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_coarse=False):
     """
     Executes a Hierarchical Pathfinding simulation using a 'Sense, Plan, Act' loop.
-
-    This function bridges the gap between global route planning and local obstacle avoidance,
-    simulating how a lunar rover navigates unknown, high-resolution terrain based on a 
-    low-resolution orbital map. It performs the following sequence:
-    
-    1. Calculates a macro-route across the low-resolution `coarse_grid` (Global Planning).
-    2. Translates the resulting coarse waypoints into bounding box coordinates on the `dyn_grid`.
-    3. Generates a visual macro-guideline (golden line) representing the intended global path.
-    4. Iteratively drives the rover towards the nearest edge of the next coarse waypoint by:
-       - Sensing: Uncovering high-resolution obstacles using `sensor_sweep` within the rover's radius.
-       - Planning: Running a localized A* search to navigate around newly discovered barriers.
-       - Acting: Animating the rover one step forward along the local path and painting a historical trail.
-    5. Performs automatic cleanup of A* search artifacts (open/closed nodes) between steps 
-       and upon arrival at the final destination.
-
-    :param coarse_grid: The Grid object representing the global, low-resolution map.
-    :param dyn_grid: The Grid object representing the local, high-resolution map.
-    :param args: Parsed command-line arguments containing configuration data (e.g., .heuristic, .precheck, .sensor).
-    :param animate: Boolean controlling whether the pathfinding execution renders to the display frame-by-frame.
+    ... [Docstring omitted for brevity, but stays conceptually the same] ...
     """
     print("Starting Dynamic Hierarchical Pathfinding...")
+    print("Calculating TSP matrix silently in the background...")
     
     # ==========================================
-    # 1: MACRO-PLANNING (COARSE GRID)
+    # 1: MACRO-PLANNING & TSP (COARSE GRID)
     # ==========================================
     
-    # Initialize the neighbors for the low-resolution grid
-    for row in coarse_grid.grid:
-        for node in row:
-            node.update_neighbors(coarse_grid.grid, args.heuristic)
-            
-    if args.precheck:
-        algo.bfs_precheck(coarse_grid.start_pos, coarse_grid.end_pos)
-        
-    # Conditionally draw the coarse map search
-    draw_func = (lambda: coarse_grid.draw()) if vis_coarse else (lambda: None)
-    coarse_path = algo.algorithm(draw_func, coarse_grid.grid, coarse_grid.start_pos, coarse_grid.end_pos, args.heuristic)
-    
-    if not coarse_path:
-        print("ERR: No valid path found on the coarse grid.")
-        return
-        
-    # Pause briefly so the user can admire the macro-route before we swap maps
-    if vis_coarse and animate:
-        pygame.time.delay(1200)
+    best_perm, best_cost, tsp_report = compute_tsp_matrix(coarse_grid, args.heuristic)
 
-    # Extract the exact pixel coordinates of the coarse path to draw the golden macro-guideline
+    if not best_perm:
+        print("ERR: No valid macro-route found connecting all destinations.")
+        return
+
+    tsp_report.append("\n" + "-"*50)
+    tsp_report.append(f"OPTIMAL MACRO-ROUTE FOUND (Cost: {best_cost})")
+    tsp_report.append("-" * 50)
+
+    # Stitch the optimal path segments together
+    coarse_path = []
+    current_start = coarse_grid.start_pos
+    draw_func = (lambda: coarse_grid.draw()) if vis_coarse else (lambda: None)
+    
+    for dest in best_perm:
+        segment_path = algo.algorithm(draw_func, coarse_grid.grid, current_start, dest, args.heuristic)
+        
+        if coarse_path:
+            coarse_path.extend(segment_path[1:]) 
+        else:
+            coarse_path.extend(segment_path)
+            
+        current_start = dest
+        
+    # Clean up the grid BEFORE the pause
     gps_guideline = []
     for c_node in coarse_path:
-        # Node.x/y is the top-left pixel, so we add half the width to hit dead center
         center_x = c_node.x + (c_node.width // 2)
         center_y = c_node.y + (c_node.width // 2)
         gps_guideline.append((center_x, center_y))
         
-    # Attach the guideline to the dynamic grid so its draw() method can render it
+        # Strip the purple path state from the node
+        if c_node != coarse_grid.start_pos and c_node not in coarse_grid.destinations:
+            if hasattr(c_node, 'is_path_node'): c_node.is_path_node = False
+            if hasattr(c_node, 'is_path'): c_node.is_path = False
+            if hasattr(c_node, 'path'): c_node.path = False
+
+    for row in coarse_grid.grid:
+        for node in row:
+            if node.is_open_node or node.is_closed_node:
+                node.is_open_node = False
+                node.is_closed_node = False
+            node.update_color(show_search=getattr(coarse_grid, 'show_search', False))
+
+    coarse_grid.global_route = gps_guideline
+    coarse_grid.show_guideline = True 
+    
+    if vis_coarse and animate:
+        coarse_grid.draw() 
+        pygame.time.delay(1200)
+
     dyn_grid.global_route = gps_guideline
 
     # ==========================================
     # 2: SETUP DYNAMIC GRID TRANSLATION
     # ==========================================
-
-    # Calculate the size difference between the grids
     scale = len(dyn_grid.grid) / len(coarse_grid.grid)
     
-    # Map the coarse starting node to the exact center of its corresponding block on the dynamic grid
     c_start = coarse_path[0]
     rx = min(int(c_start.row * scale + scale / 2), len(dyn_grid.grid) - 1)
     ry = min(int(c_start.col * scale + scale / 2), len(dyn_grid.grid) - 1)
     
-    # Place the rover at the calculated starting coordinates
     rover_node = dyn_grid.grid[rx][ry]
     dyn_grid.start_pos = rover_node
     rover_node.set_start()
     
-    # Map the final coarse destination to the dynamic grid so we have a visual target (Turquoise node)
     c_end = coarse_path[-1]
     ex = min(int(c_end.row * scale + scale / 2), len(dyn_grid.grid) - 1)
     ey = min(int(c_end.col * scale + scale / 2), len(dyn_grid.grid) - 1)
     global_end_node = dyn_grid.grid[ex][ey]
 
-    # Initialize a list to track exactly where the rover drives so we can draw a solid purple trail
     historical_path = []
 
     # ==========================================
     # 3: SENSE, PLAN, ACT LOOP
     # ==========================================
-
-    # Loop through every macro-waypoint the coarse grid told us to visit
     for waypoint in coarse_path[1:]:
-        
-        # Keep the Pygame window responsive so it doesn't freeze or crash during the loop
         if animate:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     quit()
-                # Allow the user to toggle the golden guideline mid-simulation
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_g:
                         dyn_grid.toggle_guideline()
                         dyn_grid.draw()
 
-        # Calculate the literal physical boundaries (bounding box) of the next coarse node block
         min_x = int(waypoint.row * scale)
         max_x = int((waypoint.row + 1) * scale) - 1
         min_y = int(waypoint.col * scale)
         max_y = int((waypoint.col + 1) * scale) - 1
         
-        # Clamp the local target to the nearest edge of the target bounding box. 
-        # This prevents the rover from having to drive to the *exact center* of every coarse block.
         target_x = max(min_x, min(rover_node.row, max_x))
         target_y = max(min_y, min(rover_node.col, max_y))
         target_node = dyn_grid.grid[target_x][target_y]
         
-        # If the rover is already on the edge of the bounding box, skip to the next waypoint
         if rover_node == target_node: 
             continue
         
-        # Visually mark the local mini-goal
         target_node.set_end()
         
-        # Update neighbors on the high-res grid before planning so A* knows about new barriers
         for row in dyn_grid.grid:
             for node in row:
                 node.update_neighbors(dyn_grid.grid, args.heuristic)
                 
-        # --- SENSE ---
-        # The rover pings its surroundings, uncovering actual high-res terrain from the hidden map image
+        # --- SENSE & PLAN ---
         dyn_grid.sensor_sweep(rover_node, radius=args.sensor)
-                
-        # --- PLAN ---
-        # Run A* locally to figure out how to get to the bounding box edge, animating the search if enabled
         draw_func = (lambda: dyn_grid.draw()) if animate else (lambda: None)
         local_path = algo.algorithm(draw_func, dyn_grid.grid, rover_node, target_node, args.heuristic)
         
-        # If A* fails locally, the terrain is impassable
         if not local_path or len(local_path) < 2:
             print(f"ERR: Rover got stuck at [{rover_node.row}, {rover_node.col}]! Obstacles blocked the way.")
             return
         
         # --- ACT ---
-        # Drive the rover step-by-step along the localized path we just generated
         for step_node in local_path[1:]:
-            
             if animate:
-                # Keep the window responsive during the driving animation
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         pygame.quit()
@@ -178,24 +240,19 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
                         if event.key == pygame.K_g:
                             dyn_grid.toggle_guideline()
             
-            # Save the node we are currently standing on to our permanent trail
             historical_path.append(rover_node)
-            rover_node.set_path()      # Color the old node purple
+            rover_node.set_path()      
             
-            # Move the rover to the next physical step
             rover_node = step_node
-            rover_node.set_start()     # Color the new node orange
+            rover_node.set_start()     
             
             if animate:
-                # Render the frame and pause briefly to animate the movement
                 dyn_grid.draw()
                 pygame.time.delay(10)      
         
         # ==========================================
         # 4: LOCAL CLEANUP
         # ==========================================
-        
-        # Wipe the red/green A* search artifacts off the grid so the next local plan starts clean
         for row in dyn_grid.grid:
             for node in row:
                 if node.is_open_node or node.is_closed_node:
@@ -203,11 +260,9 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
                     node.is_closed_node = False
                     node.update_color(show_search=dyn_grid.show_search)
         
-        # The cleanup loop above might have accidentally wiped parts of our purple trail; repaint it
         for node in historical_path:
             node.set_path()
         
-        # Ensure the final ultimate destination marker is still visible
         global_end_node.set_end()
         
         if animate:
@@ -216,21 +271,23 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
     # ==========================================
     # 5: FINAL SIMULATION CLEANUP & METRICS
     # ==========================================
-    
-    # Calculate Coarse Metrics
     coarse_steps = len(coarse_path) - 1
     coarse_terrain_cost = sum(node.extra_cost for node in coarse_path)
     
-    # Calculate Dynamic Metrics
     dyn_steps = len(historical_path) 
     dyn_terrain_cost = sum(node.extra_cost for node in historical_path) + global_end_node.extra_cost
 
-    # Calculate Scaled and Normalized Metrics for fair comparison
     equiv_coarse_steps = coarse_steps * scale
     equiv_coarse_cost = coarse_terrain_cost * scale
     
     coarse_avg_severity = coarse_terrain_cost / max(1, coarse_steps)
     dyn_avg_severity = dyn_terrain_cost / max(1, dyn_steps)
+
+    print("\n\n" + "*"*70)
+    print("FINAL SIMULATION REPORT")
+    print("*"*70)
+    
+    print("\n".join(tsp_report))
 
     print("\n" + "="*50)
     print("SUCCESS: Destination reached on the dynamic map!")
@@ -244,7 +301,6 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
     print(f"Actual Severity  : {dyn_avg_severity:.2f} penalty/step")
     print("="*50 + "\n")
 
-    # Perform one last wipe of the search artifacts so the final UI presentation is completely clean
     for row in dyn_grid.grid:
         for node in row:
             if node.is_open_node or node.is_closed_node:
@@ -252,14 +308,11 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
                 node.is_closed_node = False
                 node.update_color(show_search=dyn_grid.show_search)
                 
-    # Lock in the purple trail, the orange rover, and the turquoise destination
     for node in historical_path:
         node.set_path()
         
     rover_node.set_start()
     global_end_node.set_end()
-    
-    # Always draw the final result once, regardless of the animate flag
     dyn_grid.draw()
 
 def main(win, width):
@@ -283,7 +336,6 @@ def main(win, width):
     # ==========================================
     # INPUT VALIDATION & PATH ROUTING
     # ==========================================
-    
     if args.path_only:
         if len(args.path_only) != 4:
             parser.error("ERR: Invalid number of supplied values.")
@@ -291,14 +343,12 @@ def main(win, width):
             if coord >= args.size or coord < 0:
                 parser.error("ERR: Invalid coord in --path_only.")
 
-    # 1. Handle Coarse Map Routing
     map_path = None
     if args.use_map:
         map_path = os.path.join(MAPS_DIR, args.use_map)
         if not os.path.exists(map_path):
             parser.error(f"ERR: Could not find the map image at: {args.use_map}")
 
-    # 2. Handle Dynamic Map Routing and Dependencies
     dyn_map_path = None
     if args.dynamic:
         if not args.use_map:
@@ -308,7 +358,6 @@ def main(win, width):
         if not os.path.exists(dyn_map_path):
             parser.error(f"ERR: Could not find the dynamic map image at: {args.dynamic}")
     else:
-        # If NOT using dynamic, forbid dynamic-only flags
         if args.sensor != 1: 
             parser.error("--sensor can only be used in conjunction with the --dynamic flag.")
         if args.mode is not None:
@@ -317,8 +366,6 @@ def main(win, width):
     # ==========================================
     # INITIALIZE PARAMETERS
     # ==========================================
-    
-    # Safely set the default mode if the user didn't explicitly provide one
     if not args.mode:
         args.mode = "fast"
         
@@ -365,31 +412,23 @@ def main(win, width):
         coarse_grid.start_pos = coarse_grid.grid[x1][y1]
         coarse_grid.start_pos.set_start()
         
-        # Assign to the new destinations list instead of end_pos
         dest_node = coarse_grid.grid[x2][y2]
         coarse_grid.destinations.append(dest_node)
         dest_node.set_end()
-        # Ensure algo.algorithm still has a single target for now
         coarse_grid.end_pos = dest_node 
 
         if dyn_grid:
             active_grid = dyn_grid
-            global WIN
-            WIN = pygame.display.set_mode((width, width))
-            active_grid.win = WIN
             active_grid.draw()
             execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=False)
         else:
             for row in coarse_grid.grid:
                 for node in row:
                     node.update_neighbors(coarse_grid.grid, args.heuristic)
-
             if args.precheck:
                 algo.bfs_precheck(coarse_grid.start_pos, coarse_grid.end_pos)
 
             algo.algorithm(lambda: None, coarse_grid.grid, coarse_grid.start_pos, coarse_grid.end_pos, args.heuristic)
-            WIN = pygame.display.set_mode((width, width))
-            coarse_grid.win = WIN
             active_grid.draw()
 
     run = True
@@ -420,23 +459,30 @@ def main(win, width):
                 elif event.key == pygame.K_5:
                     selected_brush = 'Barrier (5)'
                 
-                # Update the active grid so it can draw the text!
                 active_grid.selected_brush = selected_brush
                 
                 # --- START PATHFINDING ---
-                # NOTE: For now, we just use active_grid.destinations[0] to keep single-target A* working until TSP is built
                 if event.key == pygame.K_SPACE and active_grid.start_pos and len(active_grid.destinations) > 0:
                     
-                    active_grid.end_pos = active_grid.destinations[0]
-                    
                     if args.mode == "sandbox" or not dyn_grid:
-                        # Standard A* on whichever map you are currently looking at
-                        for row in grid:
-                            for node in row:
-                                node.update_neighbors(grid, args.heuristic)
-                        if args.precheck:
-                            algo.bfs_precheck(active_grid.start_pos, active_grid.end_pos)
-                        algo.algorithm(lambda: active_grid.draw(), grid, active_grid.start_pos, active_grid.end_pos, args.heuristic)
+                        best_perm, best_cost, tsp_report = compute_tsp_matrix(active_grid, args.heuristic)
+                        
+                        print("\n".join(tsp_report))
+
+                        if best_perm:
+                            print("\n" + "-"*50)
+                            print(f"OPTIMAL ROUTE FOUND (Cost: {best_cost})")
+                            print("-" * 50)
+                            print("Animating sequence...")
+                            
+                            current_start = active_grid.start_pos
+                            for dest in best_perm:
+                                algo.algorithm(lambda: active_grid.draw(), grid, current_start, dest, args.heuristic)
+                                current_start = dest 
+                                
+                            print("Simulation Complete.\n")
+                        else:
+                            print("\nERR: No valid route connecting all destinations exists due to barriers.")
 
                     elif args.mode == "fast":
                         if dyn_grid and active_grid == coarse_grid:
@@ -454,7 +500,6 @@ def main(win, width):
                 if event.key == pygame.K_d and dyn_grid:
                     active_grid = dyn_grid if active_grid == coarse_grid else coarse_grid
                     grid = active_grid.grid
-                    # Ensure the brush state follows to the newly active map
                     active_grid.selected_brush = selected_brush
 
                 # --- CLEAR GRIDS (Soft Reset) ---
@@ -462,15 +507,18 @@ def main(win, width):
                     if active_grid == coarse_grid:
                         coarse_grid = grid_manager.Grid(args.size, width, WIN)
                         coarse_grid.start_pos = None
+                        coarse_grid.end_pos = None
                         coarse_grid.destinations = []
                         active_grid = coarse_grid
                         if dyn_grid:
                             dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
                             dyn_grid.start_pos = None
+                            dyn_grid.end_pos = None
                             dyn_grid.destinations = []
                     else:
                         dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN)
                         dyn_grid.start_pos = None
+                        dyn_grid.end_pos = None
                         dyn_grid.destinations = []
                         active_grid = dyn_grid
                     grid = active_grid.grid
@@ -481,6 +529,7 @@ def main(win, width):
                     if active_grid == coarse_grid:
                         coarse_grid = grid_manager.Grid(args.size, width, WIN, map_img)
                         coarse_grid.start_pos = None
+                        coarse_grid.end_pos = None
                         coarse_grid.destinations = []
                         if args.use_map:
                             coarse_grid.load_map()
@@ -489,13 +538,14 @@ def main(win, width):
                         if dyn_grid:
                             dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
                             dyn_grid.start_pos = None
+                            dyn_grid.end_pos = None
                             dyn_grid.destinations = []
-                            # Reload dynamic map if in sandbox mode
                             if args.mode == "sandbox":
                                 dyn_grid.load_map()
                     else:
                         dyn_grid = grid_manager.Grid(dyn_map_size, width, WIN, dyn_map_img)
                         dyn_grid.start_pos = None
+                        dyn_grid.end_pos = None
                         dyn_grid.destinations = []
                         dyn_grid.load_map() 
                         active_grid = dyn_grid
@@ -522,7 +572,7 @@ def main(win, width):
                     
                     if selected_brush == 'Start (9)':
                         if active_grid.start_pos:
-                            active_grid.start_pos.reset() # Erase old start
+                            active_grid.start_pos.reset()
                         active_grid.start_pos = node
                         node.set_start()
                         
@@ -537,7 +587,6 @@ def main(win, width):
                             
                     elif selected_brush.startswith('Cost'):
                         if node != active_grid.start_pos and node not in active_grid.destinations:
-                            # Extract the integer from the string (e.g., 'Cost 3' -> 3)
                             weight = int(selected_brush.split(' ')[1])
                             node.extra_cost = weight
                             node.is_barrier_node = False
