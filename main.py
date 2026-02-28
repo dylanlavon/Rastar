@@ -337,11 +337,12 @@ def main(win, width):
     # INPUT VALIDATION & PATH ROUTING
     # ==========================================
     if args.path_only:
-        if len(args.path_only) != 4:
-            parser.error("ERR: Invalid number of supplied values.")
+        # Check for at least 4 coordinates, and ensure it's an even number (pairs of X,Y)
+        if len(args.path_only) < 4 or len(args.path_only) % 2 != 0:
+            parser.error("ERR: --path_only requires pairs of coordinates (e.g., StartX StartY Dest1X Dest1Y Dest2X Dest2Y...).")
         for coord in args.path_only:
             if coord >= args.size or coord < 0:
-                parser.error("ERR: Invalid coord in --path_only.")
+                parser.error("ERR: Invalid coord in --path_only. Out of grid bounds.")
 
     map_path = None
     if args.use_map:
@@ -408,27 +409,35 @@ def main(win, width):
     active_grid.selected_brush = selected_brush
 
     if args.path_only:
-        x1, y1, x2, y2 = args.path_only
-        coarse_grid.start_pos = coarse_grid.grid[x1][y1]
+        coords = args.path_only
+        
+        # 1. Assign the Start Node (First pair)
+        start_x, start_y = coords[0], coords[1]
+        coarse_grid.start_pos = coarse_grid.grid[start_x][start_y]
         coarse_grid.start_pos.set_start()
         
-        dest_node = coarse_grid.grid[x2][y2]
-        coarse_grid.destinations.append(dest_node)
-        dest_node.set_end()
-        coarse_grid.end_pos = dest_node 
+        # 2. Assign all subsequent pairs as Destination Nodes
+        for i in range(2, len(coords), 2):
+            dest_x, dest_y = coords[i], coords[i+1]
+            dest_node = coarse_grid.grid[dest_x][dest_y]
+            coarse_grid.destinations.append(dest_node)
+            dest_node.set_end()
 
+        # 3. Trigger the appropriate execution mode
         if dyn_grid:
             active_grid = dyn_grid
             active_grid.draw()
             execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=False)
         else:
-            for row in coarse_grid.grid:
-                for node in row:
-                    node.update_neighbors(coarse_grid.grid, args.heuristic)
-            if args.precheck:
-                algo.bfs_precheck(coarse_grid.start_pos, coarse_grid.end_pos)
-
-            algo.algorithm(lambda: None, coarse_grid.grid, coarse_grid.start_pos, coarse_grid.end_pos, args.heuristic)
+            active_grid.draw()
+            # If no dynamic grid, just run the TSP matrix and render the coarse result immediately
+            best_perm, best_cost, tsp_report = compute_tsp_matrix(coarse_grid, args.heuristic)
+            print("\n".join(tsp_report))
+            if best_perm:
+                current_start = coarse_grid.start_pos
+                for dest in best_perm:
+                    algo.algorithm(lambda: None, coarse_grid.grid, current_start, dest, args.heuristic)
+                    current_start = dest
             active_grid.draw()
 
     run = True
