@@ -320,7 +320,6 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
 def main(win, width):
     parser = argparse.ArgumentParser()
     
-    # NEW: We make heuristic optional (nargs="?") so it doesn't crash if we provide it via YAML instead of CLI
     parser.add_argument("heuristic", type=str, nargs="?", choices=["manhattan", "euclidean", "octile"], help="Choose the heuristic function.")
     parser.add_argument("--config", type=str, help="Path to a YAML configuration file.")
     
@@ -355,7 +354,7 @@ def main(win, width):
             if config_data:
                 parser.set_defaults(**config_data)
                 
-    # 3. Parse EVERYTHING. Any explicitly typed CLI flags will automatically override the YAML defaults!
+    # 3. Parse EVERYTHING. Any explicitly typed CLI flags will automatically override the YAML defaults
     args = parser.parse_args()
     
     # 4. Final check to ensure a heuristic was provided (either via YAML or CLI)
