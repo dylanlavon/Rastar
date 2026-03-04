@@ -8,26 +8,35 @@ Initially being developed for CENG 6332 (High Performance Computer Architecture)
 
 ## To Do:
 - [X] Implement Single-heuristic D*
+- [ ] DEM to PNG conversion script
 - [ ] Add multi-heuristic support
 - - [ ] Mock lighting
 - - [ ] Mock slope
 - - [ ] Mock comms line-of-sight
-- [ ] Multiple science stations (TSP)
+- [X] Multiple science stations (TSP)
 - [ ] Field-based traversal
 <br><br>
 ## Using main.py
 **Runs the A\* Pathfinding visualization.**
 
-In a new grid, the first left click will place the start node (teal). The second left click will place the goal node (orange). Any left clicks after these two nodes are placed will be barrier nodes (black).
+In a new grid, use the following controls to place/remove nodes, weighted terrain, and barriers.
+- **Left Click**: Place the currently selected node at the cursor's location. This will overwrite the weight of the node that was there previously.
+- **Right Click**: Remove the node at the cursor's location. If map data was loaded using --use_map, the original node from the loaded map will be restored. Otherwise, it will return to an empty node.
+- **Key 1**: Select the Cost 1 node. This node will have an extra weight of 1.
+- **Key 2**: Select the Cost 2 node. This node will have an extra weight of 2.
+- **Key 3**: Select the Cost 3 node. This node will have an extra weight of 3.
+- **Key 4**: Select the Cost 4 node. This node will have an extra weight of 4.
+- **Key 5**: Select the Cost 5 (Barrier) node. This node is completely impassable.
+- **Key 9**: Select the start node (Teal). Only a single start node can be placed. Attempting to place a second start node will remove the preexisting start node.
+- **Key 0**: Select the destination node (Orange). Multiple destination nodes can be placed.
 
-- Nodes can be erased by using right click.
-- A grid can be cleared by pressing the **"C"** key.
-- If running using a map, pressing **"R"** will reset to the initial state of that map. *(Note: If viewing the dynamic map, pressing R will fully load its barriers, allowing for sandbox pathfinding on the high-resolution grid).*
-- After the algorithm completes, pressing **"T"** will toggle the search area, and will only show the start, end, and path nodes.
-- When running a dynamic simulation, pressing **"D"** toggles the view between the coarse global grid and the dynamic local grid.
-- Pressing **"G"** toggles the golden macro-path guideline overlay on the dynamic map.
-
-Hitting the **Spacebar** will start the algorithm, as long as the start and goal nodes are placed on the grid.
+Additional controls include:
+- **Spacebar**: Start running the algorithm. Requires at least one start node and destination node on the grid.
+- **Key C**: Completely clear the entire currently selected grid, setting all nodes to empty. Only available when the algorithm is not running.
+- **Key R**: Reset the currently selected grid back to to its initial state. If a map was loaded using --use_map, this data is loaded. Otherwise, the grid is completely reset. Only available when the algorithm is not running.
+- **Key T**: Toggles the search area. After a search is completed, toggle between rendering the entire search area or just the path that has been found. Only available when the algorithm is not running.
+- **Key D**: Toggles between the Coarse map and the Dynamic map. Only available when using --dynamic and when the algorithm is not running.
+- **Key G**: Toggles the Golden macro-path guideline overlay on the Dynamic map. Only available when using --dynamic and when the algorithm is not running.
 
 After the algorithm completes, the elapsed time will display in the console output.
 
@@ -41,12 +50,14 @@ By supplying both *--use_map* (coarse global map) and *--dynamic* (high-resoluti
 
 Arguments: 
 - _heuristic_, **required**, positional: Tell the script which heuristic function to use. [manhattan, euclidean, octile]
+- _config_: Name of a yaml file in the /config directory. Parameters defined in the yaml act as defaults, and can be overwritten by command line arguments.
 - _size_: Width/height of the grid; 50 by default. Will be overwritten by the size of a map if using --use_map.
 - _use_map_: The full name of an image in the _maps_ subdirectory. Defines barrier/empty nodes. Replaces the size of the grid if using _size_.
 - _path_only_: Supply two node locations in the form [X1 Y1 X2 Y2]. Running using this arg will only render the final path between these two nodes. Can be used with or without loading a map.
 - _precheck_: Runs a quick BFS to confirm that any path exists from the start node to the end node.
 - _dynamic_: Load a higher-resolution map image from the maps subdirectory to run the hierarchical "Sense, Plan, Act" simulation. Must be used in conjuction with *--use_map*.
 - _sensor_: Radius of the rover's sensor sweep when running a dynamic simulation. Defines how far the rover can "see" obstacles (default: 1, creating a 3x3 visibility grid).
+- _mode_: Select the execution mode. Execution Mode. 'sandbox': Free play. 'fast': Silent Coarse -> Vis Dynamic. 'full': Vis Coarse -> Vis Dynamic.
 
 <br><br>
 ## Using img_to_grid.py
