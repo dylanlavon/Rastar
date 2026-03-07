@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Define the venv directory name
+# Define the venv directory and grab the absolute path of the repository
 VENV_DIR="rastar-venv"
+REPO_DIR=$(pwd)
 
 echo "=========================================="
 echo "Initializing Rover A* Simulation Setup"
@@ -31,8 +32,23 @@ else
     echo "ERR: requirements.txt not found. Skipping dependency installation."
 fi
 
+# 5. Inject the global shortcut into the user's bashrc
+echo "Setting up venv alias..."
+ALIAS_CMD="alias rastar='source $REPO_DIR/$VENV_DIR/bin/activate'"
+
+if grep -q "alias rastar=" ~/.bashrc; then
+    echo "Shortcut 'rastar' already exists in ~/.bashrc. Skipping."
+else
+    echo "" >> ~/.bashrc
+    echo "# Rastar A* Simulation Venv Shortcut" >> ~/.bashrc
+    echo "$ALIAS_CMD" >> ~/.bashrc
+    echo "Success! Shortcut 'rastar' added."
+fi
+
 echo "=========================================="
 echo "Setup Complete!"
-echo "To activate your environment, run:"
-echo "source $VENV_DIR/bin/activate"
+echo "To use your new shortcut right now, refresh your terminal by running:"
+echo "source ~/.bashrc"
+echo ""
+echo "Then, type 'rastar' from anywhere to activate the environment."
 echo "=========================================="
