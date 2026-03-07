@@ -16,6 +16,15 @@ Initially being developed for CENG 6332 (High Performance Computer Architecture)
 - [X] Multiple science stations (TSP)
 - [ ] Field-based traversal
 <br><br>
+
+## Getting Started
+**Creating the Virtual Environment**
+
+1. Upon a fresh clone, run `./setup.sh` to create the _raster-venv_ virtual environment and install the required python packages.
+2. Run `source ~/.bashrc` to load the newly created _rastar_ alias.
+3. Enter `rastar` to activate the virtual environment, and `deactivate` to deactivate it.
+
+
 ## Using main.py
 **Runs the A\* Pathfinding visualization.**
 
