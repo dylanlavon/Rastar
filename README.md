@@ -8,7 +8,7 @@ Initially being developed for CENG 6332 (High Performance Computer Architecture)
 
 ## To Do:
 - [X] Implement Single-heuristic D*
-- [ ] DEM to PNG conversion script
+- [X] DEM to PNG conversion script
 - [ ] Add multi-heuristic support
 - - [ ] Mock lighting
 - - [ ] Mock slope
@@ -83,6 +83,24 @@ Arguments:
 - _binary_: Threshold used to set pixels to either black (barrier) or white (empty node). A higher value means more barriers. Float value between 0 and 1.
 - _fivesplit_: Indicate five "split points" which divide grayscale (0-255) into varying edge weights. Each divided area closer to black (RGB 0,0,0) has an incremented edge weight, starting at 0. See below (using _--fivesplit 50 80 100 150 200_):
   ![fivesplit](https://github.com/user-attachments/assets/4a1448fd-f097-46e1-bab2-4002c5020918)
+
+<br><br>
+## Using lola_converter.py
+**Converts 32-bit float NASA LOLA .tif files into usable .png maps.**
+
+Processes raw scientific data (like LDEM heightmaps and Slope maps) into standard 8-bit PNGs. Automatically extracts input files from the `/dems` directory and saves the converted images to the `/lola_conversions` directory. Includes percentile clipping and custom absolute bounds to strip extreme outliers and preserve visual terrain contrast.
+
+Arguments: 
+- _input_, **required**, positional: Name of the input .tif file (must be located in the `/dems` directory).
+- _output_, **required**, positional: Name of the output .png file (will be automatically saved in `/lola_conversions`).
+- _--mode_: Specify the data type being processed. Select `ldem` for normalized heightmaps, `slope` for inverted cost map gradients, or `hillshade` for visually simulated 3D sun-shading. (Default: `ldem`).
+- _-c_, _--cmap_: Apply a specific Matplotlib colormap to map the 0.0-1.0 float data across an RGB spectrum (e.g., `gray`, `terrain`, `viridis`, `plasma`, `magma`). (Default: `gray`).
+- _--min_: Force an absolute minimum data value to clip to, overriding the default 1st-percentile dynamic calculation.
+- _--max_: Force an absolute maximum data value to clip to, overriding the default 99th-percentile dynamic calculation.
+- _--histogram_: Generate and save a side-by-side PNG visualization of the data distribution before and after the 8-bit quantization process.
+- _-a_, _--azimuth_: Sun direction in degrees. Only used when running in `hillshade` mode. (Default: 315 NW).
+- _-e_, _--elevation_: Sun altitude in degrees. Only used when running in `hillshade` mode. (Default: 45).
+- _-z_, _--zoom_: Vertical exaggeration multiplier to deepen shadows for shallower lunar craters. Only used when running in `hillshade` mode. (Default: 2.0).
 
 
 
