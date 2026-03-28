@@ -6,10 +6,11 @@
 # Core Navigation Settings
 heuristic: "octile"            # 'manhattan', 'euclidean', or 'octile'
 mode: "full"                   # Execution mode ('sandbox', 'fast', or 'full')
+grayscale: true
 
 # Environment Data
-use_map: "connecting_ridge_surf_100.out.png"   # Low-res orbital prediction
-dynamic: "connecting_ridge_surf_200.out.png"   # High-res ground truth
+use_map: "connecting_ridge_surf_hs_100.out.png"   # Low-res orbital prediction
+dynamic: "connecting_ridge_surf_hs_200.out.png"   # High-res ground truth
 
 # Rover Hardware Constraints
 sensor: 5                      # Radial sweep distance for hazard detection during dynamic pathfinding

@@ -323,6 +323,7 @@ def main(win, width):
     parser.add_argument("heuristic", type=str, nargs="?", choices=["manhattan", "euclidean", "octile"], help="Choose the heuristic function.")
     parser.add_argument("--config", type=str, help="Path to a YAML configuration file.")
     
+    parser.add_argument("--grayscale", action="store_true", help="Force map loading to use 0-255 continuous weights.")
     parser.add_argument("--dynamic", type=str, help="Load a higher-resolution map.")
     parser.add_argument("--sensor", type=int, default=1, help="Radius of the rover's sensor sweep.")
     parser.add_argument("-p", "--precheck", action="store_true", help="Run a BFS precheck.")
@@ -407,13 +408,13 @@ def main(win, width):
         # If it's a PNG and it looks like a slope map, we want to ensure it opens in 'L' mode
         map_img = Image.open(map_path)
         # Force grayscale maps to 'L' mode, keep standard maps in 'RGB'
-        if map_img.mode != 'RGB' and map_img.mode != 'RGBA':
+        if args.grayscale:
             map_img = map_img.convert('L')
         args.size = map_img.width
 
     if args.dynamic:
         dyn_map_img = Image.open(dyn_map_path)
-        if dyn_map_img.mode != 'RGB' and dyn_map_img.mode != 'RGBA':
+        if args.grayscale:
             dyn_map_img = dyn_map_img.convert('L')
         dyn_map_size = dyn_map_img.width
 

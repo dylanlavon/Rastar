@@ -39,9 +39,16 @@ class Grid:
         
         self.bg_surface = None
         if self.map_img:
-            mode = self.map_img.mode
-            size = self.map_img.size
-            data = self.map_img.tobytes()
+            # Pygame cannot render 'L' mode directly, so we create a temporary RGB copy strictly for the background visuals
+            if self.map_img.mode == 'L':
+                display_img = self.map_img.convert('RGB')
+            else:
+                display_img = self.map_img
+                
+            mode = display_img.mode
+            size = display_img.size
+            data = display_img.tobytes()
+            
             surface = pygame.image.fromstring(data, size, mode)
             self.bg_surface = pygame.transform.scale(surface, (self.width, self.width))
         
@@ -102,14 +109,25 @@ class Grid:
         # 3. Draw the gridlines overlay
         self.draw_gridlines()
 
-        # 4. Draw the grid coordinates and selected brush near the mouse cursor
+        # 4. Draw the grid coordinates, node weight, and selected brush near the mouse cursor
         mouse_x, mouse_y = pygame.mouse.get_pos()
         if 0 <= mouse_x < self.width and 0 <= mouse_y < self.width:
             row, col = self.get_clicked_pos((mouse_x, mouse_y))
             
+            # Grab the specific node under the cursor
+            hovered_node = self.grid[row][col]
+            
+            # Check if it's a barrier (using getattr to safely handle different node states)
+            if getattr(hovered_node, 'is_barrier_node', False) or getattr(hovered_node, 'barrier', False):
+                node_weight = "INF"
+            else:
+                node_weight = getattr(hovered_node, 'extra_cost', 0)
+            
             # Fetch the current brush state (defaulting to Barrier if not set)
             brush_type = getattr(self, 'selected_brush', 'Barrier (5)')
-            coord_text = f"[{row}, {col}] | Brush: {brush_type}"
+            
+            # Update the text to dynamically display the weight
+            coord_text = f"[{row}, {col}] W: {node_weight} | Brush: {brush_type}"
             
             font = pygame.font.SysFont(None, 24)
             text_surf = font.render(coord_text, True, (0, 0, 0))
@@ -120,7 +138,7 @@ class Grid:
             
             text_rect = text_surf.get_rect(topleft=(mouse_x + x_offset, mouse_y + y_offset))
             
-            # Optional UI Polish: Draw a subtle white background box so text is readable over dark terrain
+            # Draw a subtle white background box so text is readable over dark terrain
             bg_rect = text_rect.copy()
             bg_rect.inflate_ip(6, 4) # Add 3px padding on sides, 2px on top/bottom
             pygame.draw.rect(self.win, (255, 255, 255), bg_rect)

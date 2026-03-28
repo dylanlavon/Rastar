@@ -1,10 +1,6 @@
 """
 Defines the Node class used to represent individual cells in the grid-based
 pathfinding visualization.
-
-Each Node stores its grid position, visual state, traversal cost, and neighbor
-relationships, and provides helper methods for A* search, visualization, and
-terrain handling.
 """
 
 # External dependencies
@@ -16,20 +12,8 @@ import colors
 class Node:
     """
     Represents a single cell in the grid used for pathfinding.
-
-    A Node tracks its position, visual state, traversal cost, and valid neighbors.
-    It supports weighted terrain, barriers, start/end nodes, and path visualization
-    for algorithms such as A*.
     """
     def __init__(self, row, col, width, total_rows):
-        """
-        Initializes a grid node with position, size, and default traversal state.
-        
-        :param row: Row index of the node in the grid
-        :param col: Column index of the node in the grid
-        :param width: Pixel width of the node when drawn
-        :param total_rows: Total number of rows/columns in the grid
-        """
         self.row = row
         self.col = col
         self.width = width
@@ -50,6 +34,7 @@ class Node:
         
         # --- RENDER STATE ---
         self.color = colors.WHITE
+        self.base_color = colors.WHITE # ---> NEW: Memory of the original terrain color
         self.neighbors = []
         
     def get_pos(self):
@@ -57,23 +42,12 @@ class Node:
         return self.row, self.col
     
     # --- STATE GETTERS ---
-    def is_closed(self):
-        return self.is_closed_node
-    
-    def is_open(self):
-        return self.is_open_node
-    
-    def is_barrier(self):
-        return self.is_barrier_node
-    
-    def is_start(self):
-        return self.is_start_node
-    
-    def is_end(self):
-        return self.is_end_node
-    
-    def is_path(self):
-        return self.is_path_node
+    def is_closed(self): return self.is_closed_node
+    def is_open(self): return self.is_open_node
+    def is_barrier(self): return self.is_barrier_node
+    def is_start(self): return self.is_start_node
+    def is_end(self): return self.is_end_node
+    def is_path(self): return self.is_path_node
 
     # --- STATE SETTERS ---
     def set_closed(self):
@@ -85,30 +59,50 @@ class Node:
         self.update_color()
     
     def set_barrier(self):
-        self.reset_search_state() # Barriers shouldn't have search data
+        self.reset_search_state()
         self.extra_cost = 0
         self.is_barrier_node = True
+        self.base_color = colors.BLACK # Update base memory
         self.update_color()
 
     def set_fivesplit1(self):
         self.is_barrier_node = False
         self.extra_cost = 1
+        self.base_color = colors.FIVESPLIT_1 # Update base memory
         self.update_color()
     
     def set_fivesplit2(self):
         self.is_barrier_node = False
         self.extra_cost = 2
+        self.base_color = colors.FIVESPLIT_2 # Update base memory
         self.update_color()
 
     def set_fivesplit3(self):
         self.is_barrier_node = False
         self.extra_cost = 3
+        self.base_color = colors.FIVESPLIT_3 # Update base memory
         self.update_color()
 
     def set_fivesplit4(self):
         self.is_barrier_node = False
         self.extra_cost = 4
+        self.base_color = colors.FIVESPLIT_4 # Update base memory
         self.update_color()
+
+    def set_grayscale_cost(self, gray_value):
+        """
+        Maps a 0-255 grayscale pixel to a dynamic pathfinding cost.
+        """
+        if gray_value == 0:
+            self.set_barrier()
+        else:
+            self.extra_cost = 255 - gray_value
+            self.is_barrier_node = False
+            
+            # ---> NEW: Save the grayscale tuple to memory
+            rgb_val = (gray_value, gray_value, gray_value)
+            self.base_color = rgb_val
+            self.color = rgb_val
 
     def set_start(self):
         self.is_start_node = True
@@ -129,6 +123,7 @@ class Node:
         """Hard reset: Clears everything, turning the node back into plain white terrain."""
         self.is_barrier_node = False
         self.extra_cost = 0
+        self.base_color = colors.WHITE # Clear memory
         self.reset_search_state()
         
     def reset_search_state(self):
@@ -144,9 +139,7 @@ class Node:
     def update_color(self, show_search=True):
         """
         Calculates the color of the node based on priority.
-        UI Elements (Start/End) > Path > Search Area > Terrain Weight > Empty Space.
-        
-        :param show_search: If False, hides the red/green A* search artifacts.
+        UI Elements (Start/End) > Path > Search Area > Base Terrain.
         """
         # 1. Highest Priority: Explicit Pathing Markers
         if self.is_start_node:
@@ -163,32 +156,19 @@ class Node:
             self.color = colors.GREEN
             
         # 3. Base Terrain
-        elif self.is_barrier_node:
-            self.color = colors.BLACK
-        elif self.extra_cost == 1:
-            self.color = colors.FIVESPLIT_1
-        elif self.extra_cost == 2:
-            self.color = colors.FIVESPLIT_2
-        elif self.extra_cost == 3:
-            self.color = colors.FIVESPLIT_3
-        elif self.extra_cost == 4:
-            self.color = colors.FIVESPLIT_4
-            
-        # 4. Default Space
         else:
-            self.color = colors.WHITE
+            # Fall back to whatever the node remembers its original terrain color being
+            self.color = self.base_color
 
     def draw(self, win):
-        """
-        Draws the node as a colored square on the given pygame surface
-        """
+        """Draws the node as a colored square on the given pygame surface"""
+        # Only draw if the color is DIFFERENT from the background image
+        # In this case, we always want to draw the node's color unless it's perfectly white
         if self.color != colors.WHITE:
             pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.width))
 
     def update_neighbors(self, grid, heuristic):
-        """
-        Updates the list of valid neighboring nodes based on movement rules.
-        """
+        """Updates the list of valid neighboring nodes based on movement rules."""
         self.neighbors = []
         if heuristic == "manhattan":
             directions = [
@@ -209,21 +189,5 @@ class Node:
                     if not grid[new_row][new_col].is_barrier():
                         self.neighbors.append(grid[new_row][new_col])
 
-    def set_grayscale_cost(self, gray_value):
-        """
-        Maps a 0-255 grayscale pixel to a dynamic pathfinding cost.
-        0 = Impassable Barrier
-        1-255 = Traversable, where 255 is cost 0, and 1 is cost 254.
-        """
-        if gray_value == 0:
-            self.set_barrier()
-        else:
-            self.extra_cost = 255 - gray_value
-            self.is_barrier_node = False
-            
-            # Unpack the gray value into RGB so Pygame can draw it
-            self.color = (gray_value, gray_value, gray_value)
-
     def __lt__(self, other):
-        """Dummy comparison function required for PriorityQueue compatibility."""
         return False
