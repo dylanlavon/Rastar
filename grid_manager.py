@@ -156,18 +156,27 @@ class Grid:
             return
 
         map_pixels = self.map_img.load()
+        is_grayscale = self.map_img.mode == 'L'
+
         for y in range(self.map_img.height):
             for x in range(self.map_img.width):
-                if map_pixels[x, y] == colors.BLACK:
-                    self.grid[x][y].set_barrier() 
-                elif map_pixels[x, y] == colors.FIVESPLIT_4:
-                    self.grid[x][y].set_fivesplit4()
-                elif map_pixels[x, y] == colors.FIVESPLIT_3:
-                    self.grid[x][y].set_fivesplit3()
-                elif map_pixels[x, y] == colors.FIVESPLIT_2:
-                    self.grid[x][y].set_fivesplit2()
-                elif map_pixels[x, y] == colors.FIVESPLIT_1:
-                    self.grid[x][y].set_fivesplit1()
+                pixel_val = map_pixels[x, y]
+
+                if is_grayscale:
+                    # Dynamically set the pathfinding cost based on 0-255 brightness
+                    self.grid[x][y].set_grayscale_cost(pixel_val)
+                else:
+                    # Fallback to the original 5-split logic for RGB maps
+                    if pixel_val == colors.BLACK:
+                        self.grid[x][y].set_barrier() 
+                    elif pixel_val == colors.FIVESPLIT_4:
+                        self.grid[x][y].set_fivesplit4()
+                    elif pixel_val == colors.FIVESPLIT_3:
+                        self.grid[x][y].set_fivesplit3()
+                    elif pixel_val == colors.FIVESPLIT_2:
+                        self.grid[x][y].set_fivesplit2()
+                    elif pixel_val == colors.FIVESPLIT_1:
+                        self.grid[x][y].set_fivesplit1()
 
     def sensor_sweep(self, center_node, radius=1):
         """
@@ -182,6 +191,7 @@ class Grid:
             return
 
         map_pixels = self.map_img.load()
+        is_grayscale = self.map_img.mode == 'L'
         cx, cy = center_node.row, center_node.col
 
         # Loop through a bounding box defined by the radius
@@ -198,15 +208,18 @@ class Grid:
                     if node.is_start() or node.is_end():
                         continue
                         
-                    pixel_color = map_pixels[x, y]
+                    pixel_val = map_pixels[x, y]
                     
-                    if pixel_color == colors.BLACK:
-                        node.set_barrier()
-                    elif pixel_color == colors.FIVESPLIT_4:
-                        node.set_fivesplit4()
-                    elif pixel_color == colors.FIVESPLIT_3:
-                        node.set_fivesplit3()
-                    elif pixel_color == colors.FIVESPLIT_2:
-                        node.set_fivesplit2()
-                    elif pixel_color == colors.FIVESPLIT_1:
-                        node.set_fivesplit1()
+                    if is_grayscale:
+                        node.set_grayscale_cost(pixel_val)
+                    else:
+                        if pixel_val == colors.BLACK:
+                            node.set_barrier()
+                        elif pixel_val == colors.FIVESPLIT_4:
+                            node.set_fivesplit4()
+                        elif pixel_val == colors.FIVESPLIT_3:
+                            node.set_fivesplit3()
+                        elif pixel_val == colors.FIVESPLIT_2:
+                            node.set_fivesplit2()
+                        elif pixel_val == colors.FIVESPLIT_1:
+                            node.set_fivesplit1()

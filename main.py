@@ -403,11 +403,18 @@ def main(win, width):
     dyn_map_size = None
     
     if args.use_map:
+        # Check if the map name implies it's a raw grayscale map from our converter
+        # If it's a PNG and it looks like a slope map, we want to ensure it opens in 'L' mode
         map_img = Image.open(map_path)
+        # Force grayscale maps to 'L' mode, keep standard maps in 'RGB'
+        if map_img.mode != 'RGB' and map_img.mode != 'RGBA':
+            map_img = map_img.convert('L')
         args.size = map_img.width
 
     if args.dynamic:
         dyn_map_img = Image.open(dyn_map_path)
+        if dyn_map_img.mode != 'RGB' and dyn_map_img.mode != 'RGBA':
+            dyn_map_img = dyn_map_img.convert('L')
         dyn_map_size = dyn_map_img.width
 
     coarse_grid = grid_manager.Grid(args.size, width, win, map_img)

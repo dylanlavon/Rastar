@@ -209,6 +209,21 @@ class Node:
                     if not grid[new_row][new_col].is_barrier():
                         self.neighbors.append(grid[new_row][new_col])
 
+    def set_grayscale_cost(self, gray_value):
+        """
+        Maps a 0-255 grayscale pixel to a dynamic pathfinding cost.
+        0 = Impassable Barrier
+        1-255 = Traversable, where 255 is cost 0, and 1 is cost 254.
+        """
+        if gray_value == 0:
+            self.set_barrier()
+        else:
+            self.extra_cost = 255 - gray_value
+            self.is_barrier_node = False
+            
+            # Unpack the gray value into RGB so Pygame can draw it
+            self.color = (gray_value, gray_value, gray_value)
+
     def __lt__(self, other):
         """Dummy comparison function required for PriorityQueue compatibility."""
         return False
