@@ -72,7 +72,7 @@ if args.dynamic:
 
 for img in images:  
     # Define output path
-    out_image_path = os.path.join("maps", source_img_stripped + "_" + str(img.height) + ".out.png")
+    out_image_path = os.path.join("img_to_grid_conversions", source_img_stripped + "_" + str(img.height) + ".out.png")
 
     # Convert to barrier/free nodes
     if args.binary:

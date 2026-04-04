@@ -172,7 +172,7 @@ def algorithm(draw, grid, start_pos, end_pos, heurisitc):
                 move_cost = 1 if abs(neighbor.row - current.row) + abs(neighbor.col - current.col) == 1 else math.sqrt(2)
             
             # Make sure to add extra edge weights based on node color
-            temp_g_score = g_score[current] + move_cost + neighbor.extra_cost
+            temp_g_score = g_score[current] + move_cost + neighbor.get_total_cost()
 
             # Get heuristic values
             h_current = h(current.get_pos(), end_pos.get_pos(), heurisitc)

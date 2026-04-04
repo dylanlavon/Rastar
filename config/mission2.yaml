@@ -1,0 +1,35 @@
+# ==========================================
+# Mission Profile 2
+# Location: Connecting Ridge
+# ==========================================
+
+# Core Navigation Settings
+heuristic: "octile"            # 'manhattan', 'euclidean', or 'octile'
+mode: "full"                   # Execution mode ('sandbox', 'fast', or 'full')
+grayscale: true
+
+# Environment Data
+heightmap: "connecting_ridge_surf_100.out.png"
+dyn_heightmap: "connecting_ridge_surf_200.out.png" 
+slopemap: "connecting_ridge_surf_sl_100.out.png"
+dyn_slopemap: "connecting_ridge_surf_sl_200.out.png"
+
+# Display Preferences
+map_to_display: "slope"
+
+# Rover Hardware Constraints
+sensor: 5                      # Radial sweep distance for hazard detection during dynamic pathfinding
+
+# ==========================================
+# WAYPOINTS (TSP ROUTING)
+# Format: [StartX, StartY, Dest1X, Dest1Y, Dest2X, Dest2Y...]
+# ==========================================
+path_only: 
+  - 5   # Start X
+  - 5   # Start Y
+  - 18  # Dest 1 X (Crater edge)
+  - 40  # Dest 1 Y
+  - 40  # Dest 2 X (Science station alpha)
+  - 10  # Dest 2 Y
+  - 45  # Dest 3 X (Extraction point)
+  - 45  # Dest 3 Y

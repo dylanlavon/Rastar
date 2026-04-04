@@ -51,7 +51,7 @@ def compute_tsp_matrix(grid_obj, heuristic):
             path = algo.algorithm(lambda: None, grid_obj.grid, node_a, node_b, heuristic)
             
             if path:
-                cost = len(path) + sum(n.extra_cost for n in path)
+                cost = len(path) + sum(n.get_total_cost() for n in path)
                 distances[(node_a, node_b)] = cost
                 distances[(node_b, node_a)] = cost
             else:
@@ -274,10 +274,10 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
     # 5: FINAL SIMULATION CLEANUP & METRICS
     # ==========================================
     coarse_steps = len(coarse_path) - 1
-    coarse_terrain_cost = sum(node.extra_cost for node in coarse_path)
+    coarse_terrain_cost = sum(node.get_total_cost() for node in coarse_path)
     
     dyn_steps = len(historical_path) 
-    dyn_terrain_cost = sum(node.extra_cost for node in historical_path) + global_end_node.extra_cost
+    dyn_terrain_cost = sum(node.get_total_cost() for node in historical_path) + global_end_node.get_total_cost()
 
     equiv_coarse_steps = coarse_steps * scale
     equiv_coarse_cost = coarse_terrain_cost * scale
@@ -318,20 +318,30 @@ def execute_dynamic_pathfinding(coarse_grid, dyn_grid, args, animate=True, vis_c
     dyn_grid.draw()
 
 def main(win, width):
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Rover A* Pathfinding Tool with Multi-Layered Heuristics")
     
     parser.add_argument("heuristic", type=str, nargs="?", choices=["manhattan", "euclidean", "octile"], help="Choose the heuristic function.")
     parser.add_argument("--config", type=str, help="Path to a YAML configuration file.")
     
     parser.add_argument("--grayscale", action="store_true", help="Force map loading to use 0-255 continuous weights.")
-    parser.add_argument("--dynamic", type=str, help="Load a higher-resolution map.")
-    parser.add_argument("--sensor", type=int, default=1, help="Radius of the rover's sensor sweep.")
+    parser.add_argument("--sensor", type=int, default=1, help="Radius of the rover's sensor sweep (Dynamic mode only).")
     parser.add_argument("-p", "--precheck", action="store_true", help="Run a BFS precheck.")
+    
+    # Explicit Map Layer Arguments
+    parser.add_argument("--size", type=int, default=50, help="Grid size (overridden if maps are provided).")
+    
+    # Heightmaps
+    parser.add_argument("--heightmap", type=str, help="Name of the heightmap image in the /heightmaps directory.")
+    parser.add_argument("--dyn_heightmap", type=str, help="Name of the high-res heightmap for dynamic routing.")
+    
+    # Slopemaps
+    parser.add_argument("--slopemap", type=str, help="Name of the slopemap image in the /slopemaps directory.")
+    parser.add_argument("--dyn_slopemap", type=str, help="Name of the high-res slopemap for dynamic routing.")
 
-    size_excl_group = parser.add_mutually_exclusive_group()
-    size_excl_group.add_argument("--size", type=int, default=50, help="Grid size.")
-    size_excl_group.add_argument("--use_map", type=str, help="Choose an image to use for a predefined map.")
- 
+    # Display Toggle
+    parser.add_argument("--map_to_display", type=str, choices=["heightmap", "slope"], default="heightmap", 
+                        help="Select which layer to render visually. Defaults to heightmap if multiple are loaded.")
+
     mode_excl_group = parser.add_mutually_exclusive_group()
     mode_excl_group.add_argument("--path_only", type=int, nargs="+", help="Enter two points in the form [X1 Y1 X2 Y2 ...].")
     mode_excl_group.add_argument("--mode", type=str, choices=["sandbox", "fast", "full"], 
@@ -340,27 +350,16 @@ def main(win, width):
     # ==========================================
     # YAML CONFIGURATION INJECTION
     # ==========================================
-    # 1. Parse *only* known arguments first to see if a --config flag was passed
     temp_args, remaining_argv = parser.parse_known_args()
-    
-    # 2. If a config file exists, route it to the config directory, load it, and inject defaults
     if temp_args.config:
         config_path = os.path.join(CONFIG_DIR, temp_args.config)
-        
-        if not os.path.exists(config_path):
-            parser.error(f"ERR: Could not find configuration file at: {config_path}")
-            
+        if not os.path.exists(config_path): parser.error(f"ERR: Could not find configuration file at: {config_path}")
         with open(config_path, 'r') as file:
             config_data = yaml.safe_load(file)
-            if config_data:
-                parser.set_defaults(**config_data)
+            if config_data: parser.set_defaults(**config_data)
                 
-    # 3. Parse EVERYTHING. Any explicitly typed CLI flags will automatically override the YAML defaults
     args = parser.parse_args()
-    
-    # 4. Final check to ensure a heuristic was provided (either via YAML or CLI)
-    if not args.heuristic:
-        parser.error("ERR: A heuristic must be provided either via the command line or a YAML config file.")
+    if not args.heuristic: parser.error("ERR: A heuristic must be provided either via the command line or a YAML config file.")
 
     # ==========================================
     # INPUT VALIDATION & PATH ROUTING
@@ -373,65 +372,77 @@ def main(win, width):
             if coord >= args.size or coord < 0:
                 parser.error("ERR: Invalid coord in --path_only. Out of grid bounds.")
 
-    map_path = None
-    if args.use_map:
-        map_path = os.path.join(MAPS_DIR, args.use_map)
-        if not os.path.exists(map_path):
-            parser.error(f"ERR: Could not find the map image at: {args.use_map}")
+    # Determine if we are in "Map Mode" or "Dynamic Mode" based on provided layers
+    has_coarse_maps = args.heightmap or args.slopemap
+    has_dyn_maps = args.dyn_heightmap or args.dyn_slopemap
 
-    dyn_map_path = None
-    if args.dynamic:
-        if not args.use_map:
-            parser.error("ERR: Dynamic mode must be used in conjunction with a coarse map (--use_map).")
-        
-        dyn_map_path = os.path.join(MAPS_DIR, args.dynamic)
-        if not os.path.exists(dyn_map_path):
-            parser.error(f"ERR: Could not find the dynamic map image at: {args.dynamic}")
-    else:
-        if args.sensor != 1: 
-            parser.error("--sensor can only be used in conjunction with the --dynamic flag.")
-        if args.mode is not None:
-            parser.error("--mode can only be used in conjunction with the --dynamic flag.")
+    if has_dyn_maps and not has_coarse_maps:
+        parser.error("ERR: Dynamic mode requires at least one coarse map (--heightmap or --slopemap).")
+    if args.sensor != 1 and not has_dyn_maps: 
+        parser.error("--sensor can only be used in conjunction with dynamic maps.")
+    if args.mode and not has_dyn_maps:
+        parser.error("--mode can only be used in conjunction with dynamic maps.")
     
     # ==========================================
-    # INITIALIZE PARAMETERS
+    # INITIALIZE PARAMETERS & LOAD IMAGES
     # ==========================================
-    if not args.mode:
-        args.mode = "fast"
+    if not args.mode: args.mode = "fast"
         
-    map_img = None  
-    dyn_map_img = None
+    def load_layer(filename, directory, force_grayscale=False):
+        """Helper to safely load, validate, and optionally convert image layers."""
+        if not filename: return None
+        path = os.path.join(directory, filename)
+        if not os.path.exists(path):
+            parser.error(f"ERR: Could not find image at: {path}")
+        img = Image.open(path)
+        if force_grayscale:
+            img = img.convert('L')
+        return img
+
+    # Load all active map layers
+    coarse_height_img = load_layer(args.heightmap, "heightmaps", args.grayscale)
+    coarse_slope_img = load_layer(args.slopemap, "slopemaps", args.grayscale)
+    
+    dyn_height_img = load_layer(args.dyn_heightmap, "heightmaps", args.grayscale)
+    dyn_slope_img = load_layer(args.dyn_slopemap, "slopemaps", args.grayscale)
+
+    # Dimensional Parity Check (Your Checklist Requirement #2)
+    def validate_sizes(img1, img2, label):
+        if img1 and img2 and (img1.size != img2.size):
+            parser.error(f"ERR: {label} dimensional mismatch! Heightmap and Slopemap must be the exact same size.")
+
+    validate_sizes(coarse_height_img, coarse_slope_img, "Coarse Map")
+    validate_sizes(dyn_height_img, dyn_slope_img, "Dynamic Map")
+
+    # Set grid sizes based on the first available map layer
+    if coarse_height_img: args.size = coarse_height_img.width
+    elif coarse_slope_img: args.size = coarse_slope_img.width
+
     dyn_map_size = None
-    
-    if args.use_map:
-        # Check if the map name implies it's a raw grayscale map from our converter
-        # If it's a PNG and it looks like a slope map, we want to ensure it opens in 'L' mode
-        map_img = Image.open(map_path)
-        # Force grayscale maps to 'L' mode, keep standard maps in 'RGB'
-        if args.grayscale:
-            map_img = map_img.convert('L')
-        args.size = map_img.width
+    if dyn_height_img: dyn_map_size = dyn_height_img.width
+    elif dyn_slope_img: dyn_map_size = dyn_slope_img.width
 
-    if args.dynamic:
-        dyn_map_img = Image.open(dyn_map_path)
-        if args.grayscale:
-            dyn_map_img = dyn_map_img.convert('L')
-        dyn_map_size = dyn_map_img.width
-
-    coarse_grid = grid_manager.Grid(args.size, width, win, map_img)
+    # Initialize the new Grid objects using our updated multi-layer signature
+    coarse_grid = grid_manager.Grid(args.size, width, win, 
+                                    heightmap_img=coarse_height_img, 
+                                    slopemap_img=coarse_slope_img, 
+                                    display_mode=args.map_to_display)
     coarse_grid.start_pos = None
     coarse_grid.end_pos = None 
-    if args.use_map:
+    if has_coarse_maps:
         coarse_grid.load_map()
 
     dyn_grid = None
-    if args.dynamic:
-        dyn_grid = grid_manager.Grid(dyn_map_size, width, win, dyn_map_img)
+    if has_dyn_maps:
+        dyn_grid = grid_manager.Grid(dyn_map_size, width, win, 
+                                     heightmap_img=dyn_height_img, 
+                                     slopemap_img=dyn_slope_img, 
+                                     display_mode=args.map_to_display)
         dyn_grid.start_pos = None
         dyn_grid.end_pos = None
         if args.mode == "sandbox":
             dyn_grid.load_map()
-        
+
     active_grid = coarse_grid
     grid = active_grid.grid
 
@@ -633,9 +644,16 @@ def main(win, width):
                     elif selected_brush.startswith('Cost'):
                         if node != active_grid.start_pos and node not in active_grid.destinations:
                             weight = int(selected_brush.split(' ')[1])
-                            node.extra_cost = weight
-                            node.is_barrier_node = False
-                            node.update_color(show_search=active_grid.show_search)
+                            
+                            # Route the manual brush weight to the correct fivesplit layer helper
+                            if weight == 1:
+                                node.set_fivesplit1()
+                            elif weight == 2:
+                                node.set_fivesplit2()
+                            elif weight == 3:
+                                node.set_fivesplit3()
+                            elif weight == 4:
+                                node.set_fivesplit4()
 
             # --- RIGHT CLICK (ERASE) ---
             elif pygame.mouse.get_pressed()[2]:

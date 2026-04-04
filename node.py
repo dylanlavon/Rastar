@@ -23,7 +23,13 @@ class Node:
         
         # --- LOGICAL TERRAIN STATE ---
         self.is_barrier_node = False
-        self.extra_cost = 0
+
+        # --- INDEPENDENT HEURISTIC LAYERS ---
+        self.costs = {
+            'height': 0,
+            'slope': 0,
+            'fivesplit': 0
+        }
         
         # --- A* SEARCH STATE ---
         self.is_start_node = False
@@ -36,6 +42,14 @@ class Node:
         self.color = colors.WHITE
         self.base_color = colors.WHITE # ---> NEW: Memory of the original terrain color
         self.neighbors = []
+
+    def get_total_cost(self):
+        """Returns the combined cost penalty of all active terrain layers."""
+        if self.is_barrier_node:
+            return float('inf')
+        # TODO Add multipliers to weight heuristics: 
+        # return (self.costs['slope'] * 2.0) + self.costs['height']
+        return sum(self.costs.values())
         
     def get_pos(self):
         '''Returns the (row, column) position of the node.'''
@@ -60,49 +74,35 @@ class Node:
     
     def set_barrier(self):
         self.reset_search_state()
-        self.extra_cost = 0
+        for key in self.costs:
+            self.costs[key] = 0
         self.is_barrier_node = True
-        self.base_color = colors.BLACK # Update base memory
+        self.base_color = colors.BLACK 
         self.update_color()
 
-    def set_fivesplit1(self):
+    def set_fivesplit(self, cost, color):
+        """Helper to condense the fivesplit methods"""
         self.is_barrier_node = False
-        self.extra_cost = 1
-        self.base_color = colors.FIVESPLIT_1 # Update base memory
-        self.update_color()
-    
-    def set_fivesplit2(self):
-        self.is_barrier_node = False
-        self.extra_cost = 2
-        self.base_color = colors.FIVESPLIT_2 # Update base memory
+        self.costs['fivesplit'] = cost
+        self.base_color = color
         self.update_color()
 
-    def set_fivesplit3(self):
-        self.is_barrier_node = False
-        self.extra_cost = 3
-        self.base_color = colors.FIVESPLIT_3 # Update base memory
-        self.update_color()
+    # (Update your specific fivesplit methods to use the helper)
+    def set_fivesplit1(self): self.set_fivesplit(1, colors.FIVESPLIT_1)
+    def set_fivesplit2(self): self.set_fivesplit(2, colors.FIVESPLIT_2)
+    def set_fivesplit3(self): self.set_fivesplit(3, colors.FIVESPLIT_3)
+    def set_fivesplit4(self): self.set_fivesplit(4, colors.FIVESPLIT_4)
 
-    def set_fivesplit4(self):
-        self.is_barrier_node = False
-        self.extra_cost = 4
-        self.base_color = colors.FIVESPLIT_4 # Update base memory
-        self.update_color()
-
-    def set_grayscale_cost(self, gray_value):
+    def set_grayscale_cost(self, gray_value, layer_type):
         """
-        Maps a 0-255 grayscale pixel to a dynamic pathfinding cost.
+        Maps a 0-255 grayscale pixel to a specific heuristic layer.
+        :param layer_type: String indicating the dictionary key (e.g., 'height', 'slope')
         """
         if gray_value == 0:
             self.set_barrier()
         else:
-            self.extra_cost = 255 - gray_value
+            self.costs[layer_type] = 255 - gray_value
             self.is_barrier_node = False
-            
-            # ---> NEW: Save the grayscale tuple to memory
-            rgb_val = (gray_value, gray_value, gray_value)
-            self.base_color = rgb_val
-            self.color = rgb_val
 
     def set_start(self):
         self.is_start_node = True
@@ -122,8 +122,9 @@ class Node:
     def reset(self):
         """Hard reset: Clears everything, turning the node back into plain white terrain."""
         self.is_barrier_node = False
-        self.extra_cost = 0
-        self.base_color = colors.WHITE # Clear memory
+        for key in self.costs:
+            self.costs[key] = 0
+        self.base_color = colors.WHITE
         self.reset_search_state()
         
     def reset_search_state(self):

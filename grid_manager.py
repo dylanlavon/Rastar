@@ -21,38 +21,44 @@ from node import Node
 import colors
 
 class Grid:
-    def __init__(self, rows, width, win, map_img=None):
-        """
-        Initialize the Grid class with required attributes.
-        """
+    def __init__(self, rows, width, win, heightmap_img=None, slopemap_img=None, display_mode="heightmap"):
         self.rows = rows
         self.width = width
         self.win = win
-        self.map_img = map_img
+        
+        # Store layers
+        self.layers = {
+            'height': heightmap_img,
+            'slope': slopemap_img
+        }
+        self.display_mode = display_mode 
+        
         self.grid = []
-        
         self.show_search = True 
-        
-        # Guideline state tracking
         self.show_guideline = True
         self.global_route = []
-        
         self.bg_surface = None
-        if self.map_img:
-            # Pygame cannot render 'L' mode directly, so we create a temporary RGB copy strictly for the background visuals
-            if self.map_img.mode == 'L':
-                display_img = self.map_img.convert('RGB')
-            else:
-                display_img = self.map_img
-                
+        
+        # Determine which image to draw as the background
+        self._setup_background()
+        self.make_grid()
+
+    def _setup_background(self):
+        """Configures the visual background based on the display_mode."""
+        display_img = None
+        if self.display_mode == "slope" and self.layers['slope']:
+            display_img = self.layers['slope']
+        elif self.layers['height']:
+            display_img = self.layers['height']
+            
+        if display_img:
+            if display_img.mode == 'L':
+                display_img = display_img.convert('RGB')
             mode = display_img.mode
             size = display_img.size
             data = display_img.tobytes()
-            
             surface = pygame.image.fromstring(data, size, mode)
             self.bg_surface = pygame.transform.scale(surface, (self.width, self.width))
-        
-        self.make_grid()
 
     def toggle_search_area(self):
         """
@@ -121,7 +127,7 @@ class Grid:
             if getattr(hovered_node, 'is_barrier_node', False) or getattr(hovered_node, 'barrier', False):
                 node_weight = "INF"
             else:
-                node_weight = getattr(hovered_node, 'extra_cost', 0)
+                node_weight = hovered_node.get_total_cost()
             
             # Fetch the current brush state (defaulting to Barrier if not set)
             brush_type = getattr(self, 'selected_brush', 'Barrier (5)')
@@ -166,78 +172,66 @@ class Grid:
         return row, col
 
     def load_map(self):
-        """
-        Load in data from the pre-made map stored in self.map_img.
-        Does nothing if self.map_img is not set.
-        """
-        if not self.map_img:
-            return
+        """Loads data from ALL provided map layers into the nodes."""
+        for layer_name, img in self.layers.items():
+            if not img:
+                continue
 
-        map_pixels = self.map_img.load()
-        is_grayscale = self.map_img.mode == 'L'
+            map_pixels = img.load()
+            is_grayscale = img.mode == 'L'
 
-        for y in range(self.map_img.height):
-            for x in range(self.map_img.width):
-                pixel_val = map_pixels[x, y]
+            for y in range(img.height):
+                for x in range(img.width):
+                    pixel_val = map_pixels[x, y]
+                    node = self.grid[x][y]
 
-                if is_grayscale:
-                    # Dynamically set the pathfinding cost based on 0-255 brightness
-                    self.grid[x][y].set_grayscale_cost(pixel_val)
-                else:
-                    # Fallback to the original 5-split logic for RGB maps
-                    if pixel_val == colors.BLACK:
-                        self.grid[x][y].set_barrier() 
-                    elif pixel_val == colors.FIVESPLIT_4:
-                        self.grid[x][y].set_fivesplit4()
-                    elif pixel_val == colors.FIVESPLIT_3:
-                        self.grid[x][y].set_fivesplit3()
-                    elif pixel_val == colors.FIVESPLIT_2:
-                        self.grid[x][y].set_fivesplit2()
-                    elif pixel_val == colors.FIVESPLIT_1:
-                        self.grid[x][y].set_fivesplit1()
+                    if is_grayscale:
+                        node.set_grayscale_cost(pixel_val, layer_name)
+                        
+                        # If this is the layer we want to display, update the node's visual memory
+                        if (self.display_mode == "slope" and layer_name == "slope") or \
+                           (self.display_mode != "slope" and layer_name == "height"):
+                            node.base_color = (pixel_val, pixel_val, pixel_val)
+                            node.update_color(show_search=self.show_search)
+                    else:
+                        # Legacy fallback (only applies to heightmap layer conceptually)
+                        if layer_name == 'height':
+                            if pixel_val == colors.BLACK: node.set_barrier() 
+                            elif pixel_val == colors.FIVESPLIT_4: node.set_fivesplit4()
+                            elif pixel_val == colors.FIVESPLIT_3: node.set_fivesplit3()
+                            elif pixel_val == colors.FIVESPLIT_2: node.set_fivesplit2()
+                            elif pixel_val == colors.FIVESPLIT_1: node.set_fivesplit1()
 
     def sensor_sweep(self, center_node, radius=1):
-        """
-        Simulate a rover's sensor sweep by reading the ground-truth image (self.map_img)
-        within a given radius around the center_node and updating the grid nodes 
-        to reflect the actual terrain.
-        
-        :param center_node: The Node object representing the rover's current position
-        :param radius: How many nodes out the sensor can "see" (default 1 means a 3x3 area)
-        """
-        if not self.map_img:
-            return
-
-        map_pixels = self.map_img.load()
-        is_grayscale = self.map_img.mode == 'L'
+        """Simulate a rover's sensor sweep across ALL active layers."""
         cx, cy = center_node.row, center_node.col
 
-        # Loop through a bounding box defined by the radius
-        for i in range(-radius, radius + 1):
-            for j in range(-radius, radius + 1):
-                x = cx + i
-                y = cy + j
+        for layer_name, img in self.layers.items():
+            if not img:
+                continue
+                
+            map_pixels = img.load()
+            is_grayscale = img.mode == 'L'
 
-                # Check if x and y are within grid boundaries
-                if 0 <= x < self.rows and 0 <= y < self.rows:
-                    node = self.grid[x][y]
-                    
-                    # Prevent overwriting the rover's start/end markers
-                    if node.is_start() or node.is_end():
-                        continue
-                        
-                    pixel_val = map_pixels[x, y]
-                    
-                    if is_grayscale:
-                        node.set_grayscale_cost(pixel_val)
-                    else:
-                        if pixel_val == colors.BLACK:
-                            node.set_barrier()
-                        elif pixel_val == colors.FIVESPLIT_4:
-                            node.set_fivesplit4()
-                        elif pixel_val == colors.FIVESPLIT_3:
-                            node.set_fivesplit3()
-                        elif pixel_val == colors.FIVESPLIT_2:
-                            node.set_fivesplit2()
-                        elif pixel_val == colors.FIVESPLIT_1:
-                            node.set_fivesplit1()
+            for i in range(-radius, radius + 1):
+                for j in range(-radius, radius + 1):
+                    x, y = cx + i, cy + j
+                    if 0 <= x < self.rows and 0 <= y < self.rows:
+                        node = self.grid[x][y]
+                        if node.is_start() or node.is_end(): continue
+                            
+                        pixel_val = map_pixels[x, y]
+                        if is_grayscale:
+                            node.set_grayscale_cost(pixel_val, layer_name)
+                        else:
+                            if layer_name == 'height':
+                                if pixel_val == colors.BLACK:
+                                    node.set_barrier()
+                                elif pixel_val == colors.FIVESPLIT_4:
+                                    node.set_fivesplit4()
+                                elif pixel_val == colors.FIVESPLIT_3:
+                                    node.set_fivesplit3()
+                                elif pixel_val == colors.FIVESPLIT_2:
+                                    node.set_fivesplit2()
+                                elif pixel_val == colors.FIVESPLIT_1:
+                                    node.set_fivesplit1()
